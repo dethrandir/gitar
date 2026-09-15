@@ -1,0 +1,415 @@
+#!/usr/bin/env bash
+# gitar — elektro gitarı ses kartından kulaklığa, istersen Guitarix amfisinden
+# geçirerek bağlayan küçük bir PipeWire yardımcısı.
+# https://github.com/dethrandir/gitar
+
+set -u
+
+VERSION="1.0.0"
+REPO="dethrandir/gitar"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/gitar"
+CONFIG="$CONFIG_DIR/config"
+RUN_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+RPC_PORT="${GITAR_RPC_PORT:-7342}"
+
+# Ayar dosyası bunları doldurur (gitar ayarla)
+GIRIS=""             # gitarın takılı olduğu ses kartı (PipeWire kaynak adı)
+KANAL=""             # o kartta gitarın kanalı, ör. capture_FR
+CIKIS=""             # kulaklığın takılı olduğu çıkış (PipeWire hedef adı)
+GECIKME="128/48000"  # buffer/örnekleme hızı; 128/48000 ≈ 2.7 ms
+
+# shellcheck source=/dev/null
+[ -f "$CONFIG" ] && . "$CONFIG"
+
+# ---------------------------------------------------------------- yardımcılar
+
+hata()  { printf 'HATA: %s\n' "$*" >&2; exit 1; }
+bilgi() { printf '%s\n' "$*"; }
+bekle() { sleep "$1" 2>/dev/null || python3 -c "import time; time.sleep($1)"; }
+
+gerekli() {
+    local c
+    for c in "$@"; do
+        command -v "$c" >/dev/null 2>&1 && continue
+        hata "'$c' bulunamadı. Eksikleri kurmak için kurulumu tekrar çalıştır:
+  curl -fsSL https://raw.githubusercontent.com/$REPO/main/install.sh | sh"
+    done
+}
+
+# $1 ile başlayan satırları yazdırır (grep'in regex kaçış derdi olmadan)
+onekli() { awk -v p="$1" 'index($0, p) == 1'; }
+
+giris_portlari() { pw-link -o 2>/dev/null | onekli "$1:capture_"; }
+cikis_portlari() { pw-link -i 2>/dev/null | onekli "$1:playback_"; }
+
+bagla() { pw-link "$1" "$2" >/dev/null 2>&1 || true; }
+kopar() { pw-link -d "$1" "$2" >/dev/null 2>&1 || true; }
+
+# Stereo çıkışta sol/sağ portu, mono çıkışta aynı portu iki kez verir
+sol_sag() {
+    local portlar sol sag
+    portlar=$(cikis_portlari "$CIKIS")
+    sol=$(printf '%s\n' "$portlar" | grep -m1 '_FL$' || true)
+    sag=$(printf '%s\n' "$portlar" | grep -m1 '_FR$' || true)
+    [ -n "$sol" ] || sol=$(printf '%s\n' "$portlar" | sed -n 1p)
+    [ -n "$sag" ] || sag=$(printf '%s\n' "$portlar" | sed -n 2p)
+    [ -n "$sag" ] || sag="$sol"
+    printf '%s\n%s\n' "$sol" "$sag"
+}
+
+rpc_acik() {
+    python3 - "$RPC_PORT" <<'PY' 2>/dev/null
+import socket, sys
+try:
+    socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=0.5).close()
+except OSError:
+    sys.exit(1)
+PY
+}
+
+rpc() {
+    python3 - "$RPC_PORT" "$@" <<'PY'
+import json, socket, sys
+port, method, params = int(sys.argv[1]), sys.argv[2], json.loads(sys.argv[3])
+s = socket.create_connection(("127.0.0.1", port), timeout=5)
+s.sendall((json.dumps({"jsonrpc": "2.0", "method": method, "params": params}) + "\n").encode())
+s.close()
+PY
+}
+
+# ---------------------------------------------------------------- ayar sihirbazı
+
+# pactl çıktısından "ad<TAB>açıklama" listesi (monitor kaynakları hariç)
+dugumler() {
+    LC_ALL=C pactl list "$1" 2>/dev/null | python3 -c '
+import sys
+name = None
+for line in sys.stdin:
+    s = line.strip()
+    if s.startswith("Name: "):
+        name = s[6:]
+    elif s.startswith("Description: ") and name:
+        if not name.endswith(".monitor"):
+            print(name + "\t" + s[13:])
+        name = None
+'
+}
+
+varsayilan_cikis() {
+    pactl get-default-sink 2>/dev/null || LC_ALL=C pactl info 2>/dev/null | sed -n 's/^Default Sink: //p'
+}
+
+# $1 başlık, $2 varsayılan sıra no, stdin "değer<TAB>açıklama" satırları
+# Seçilen değeri stdout'a yazar; sorular stderr'e gider
+sec() {
+    local baslik="$1" vars="$2" satirlar i=0 cevap
+    satirlar=$(cat)
+    [ -n "$satirlar" ] || return 1
+    printf '\n%s\n' "$baslik" >&2
+    while IFS=$'\t' read -r deger aciklama; do
+        i=$((i + 1))
+        if [ "$i" = "$vars" ]; then
+            printf '  * %d) %s\n       %s\n' "$i" "${aciklama:-$deger}" "$deger" >&2
+        else
+            printf '    %d) %s\n       %s\n' "$i" "${aciklama:-$deger}" "$deger" >&2
+        fi
+    done <<<"$satirlar"
+    while :; do
+        printf 'Seçim [%s]: ' "$vars" >&2
+        read -r cevap <&3 || cevap=""
+        cevap="${cevap:-$vars}"
+        case "$cevap" in
+            ''|*[!0-9]*) ;;
+            *) if [ "$cevap" -ge 1 ] && [ "$cevap" -le "$i" ]; then
+                   printf '%s\n' "$satirlar" | sed -n "${cevap}p" | cut -f1
+                   return 0
+               fi ;;
+        esac
+        printf '1 ile %d arasında bir sayı yaz.\n' "$i" >&2
+    done
+}
+
+sira_no() { # $1 aranan değer, stdin liste; bulamazsa $2
+    local n
+    n=$(cut -f1 | awk -v v="$1" '$0 == v { print NR; exit }')
+    printf '%s\n' "${n:-$2}"
+}
+
+ayarla() {
+    gerekli pactl pw-link python3
+    local kaynaklar hedefler portlar vars yeni_giris yeni_kanal yeni_cikis
+
+    exec 3<&0  # sec() listeyi stdin'den alır, cevapları buradan okur
+    bilgi "gitar ayarları — Enter'a basarsan * işaretli seçenek kalır."
+
+    kaynaklar=$(dugumler sources)
+    [ -n "$kaynaklar" ] || hata "Hiç ses girişi bulunamadı. Ses kartı takılı mı, PipeWire çalışıyor mu?"
+    vars=$(printf '%s\n' "$kaynaklar" | sira_no "$GIRIS" "")
+    if [ -z "$vars" ]; then  # ilk kurulumda USB ses kartını öne al
+        vars=$(printf '%s\n' "$kaynaklar" | cut -f1 | awk '/usb/ { print NR; exit }')
+        vars="${vars:-1}"
+    fi
+    yeni_giris=$(printf '%s\n' "$kaynaklar" | sec "Gitar hangi ses kartına takılı?" "$vars") || exit 1
+
+    portlar=$(giris_portlari "$yeni_giris" | sed "s|^$yeni_giris:||")
+    [ -n "$portlar" ] || hata "Bu kartın giriş kanalları okunamadı: $yeni_giris"
+    if [ "$(printf '%s\n' "$portlar" | wc -l)" -eq 1 ]; then
+        yeni_kanal="$portlar"
+    else
+        vars=$(printf '%s\n' "$portlar" | sira_no "$KANAL" 1)
+        bilgi "" >&2
+        bilgi "İpucu: çoğu ses kartında 1. giriş = FL (sol), 2. giriş = FR (sağ)." >&2
+        bilgi "Emin değilsen gitarı çalarken 'gitar olc' ile iki kanalı da deneyebilirsin." >&2
+        yeni_kanal=$(printf '%s\n' "$portlar" | awk '{
+                d = $0
+                if ($0 ~ /_FL$/) d = d "  (1. giriş / sol)"
+                if ($0 ~ /_FR$/) d = d "  (2. giriş / sağ)"
+                print $0 "\t" d }' | sec "Gitar hangi kanalda?" "$vars") || exit 1
+    fi
+
+    hedefler=$(dugumler sinks)
+    [ -n "$hedefler" ] || hata "Hiç ses çıkışı bulunamadı."
+    vars=$(printf '%s\n' "$hedefler" | sira_no "${CIKIS:-$(varsayilan_cikis)}" 1)
+    yeni_cikis=$(printf '%s\n' "$hedefler" | sec "Kulaklık hangi çıkışa takılı?" "$vars") || exit 1
+
+    mkdir -p "$CONFIG_DIR"
+    {
+        printf '# gitar ayarları — "gitar ayarla" ile yeniden oluşturabilirsin\n'
+        printf 'GIRIS=%q\n' "$yeni_giris"
+        printf 'KANAL=%q\n' "$yeni_kanal"
+        printf 'CIKIS=%q\n' "$yeni_cikis"
+        printf 'GECIKME=%q\n' "$GECIKME"
+    } >"$CONFIG"
+    GIRIS="$yeni_giris" KANAL="$yeni_kanal" CIKIS="$yeni_cikis"
+    bilgi ""
+    bilgi "Kaydedildi: $CONFIG"
+    bilgi "Başlamak için: gitar amfi   (ya da efektsiz: gitar duz)"
+}
+
+# ---------------------------------------------------------------- bağlantılar
+
+kontrol_cihaz() {
+    gerekli pw-link pactl python3
+    if [ -z "$GIRIS" ] || [ -z "$KANAL" ] || [ -z "$CIKIS" ]; then
+        [ -t 0 ] || hata "Önce ses kartını seç: gitar ayarla"
+        ayarla
+    fi
+    giris_portlari "$GIRIS" | grep -qxF "$GIRIS:$KANAL" \
+        || hata "Gitar girişi bulunamadı ($GIRIS:$KANAL). Ses kartı takılı mı? Değiştiyse: gitar ayarla"
+    [ -n "$(cikis_portlari "$CIKIS")" ] \
+        || hata "Kulaklık çıkışı bulunamadı ($CIKIS). Takılı mı? Değiştiyse: gitar ayarla"
+}
+
+duz_bagla() {
+    local p
+    for p in $(sol_sag | sort -u); do bagla "$GIRIS:$KANAL" "$p"; done
+}
+
+duz_kopar() {
+    [ -n "$GIRIS" ] && [ -n "$CIKIS" ] || return 0
+    local p
+    for p in $(cikis_portlari "$CIKIS"); do kopar "$GIRIS:$KANAL" "$p"; done
+}
+
+guitarix_kapat() {
+    pkill -x guitarix 2>/dev/null || return 0  # kapanırken ayarlarını kendisi kaydeder
+    local _
+    for _ in $(seq 40); do pgrep -x guitarix >/dev/null || return 0; bekle 0.3; done
+}
+
+# $1 = rpc verilirse Guitarix uzaktan kontrol portuyla açılır. Guitarix bu portu
+# tüm ağ arayüzlerinde dinlediği için sadece "gitar ton" sırasında kullanılır.
+guitarix_baslat() {
+    gerekli guitarix
+    local ek=() on=() _
+    [ "${1:-}" = rpc ] && ek=(-p "$RPC_PORT")
+    # Debian/Ubuntu gibi JACK kütüphanesi PipeWire olmayan sistemler için
+    command -v pw-jack >/dev/null 2>&1 && on=(pw-jack)
+    if ! pgrep -x guitarix >/dev/null; then
+        bilgi "Guitarix başlatılıyor..."
+        # -J: kendi kendine bağlanmasın, bağlantıları biz kuruyoruz
+        PIPEWIRE_LATENCY="$GECIKME" nohup ${on[@]+"${on[@]}"} guitarix -J ${ek[@]+"${ek[@]}"} \
+            >"$RUN_DIR/gitar-guitarix.log" 2>&1 &
+        disown
+    fi
+    for _ in $(seq 60); do
+        pw-link -i | grep -qxF "gx_head_amp:in_0" && pw-link -o | grep -qxF "gx_head_fx:out_1" && return 0
+        bekle 0.5
+    done
+    hata "Guitarix açılamadı. Log: $RUN_DIR/gitar-guitarix.log"
+}
+
+amfi_bagla() {
+    local sol sag
+    { read -r sol; read -r sag; } < <(sol_sag)
+    bagla "$GIRIS:$KANAL"     "gx_head_amp:in_0"
+    bagla "gx_head_amp:out_0" "gx_head_fx:in_0"    # amfi bölümü -> efekt bölümü
+    bagla "gx_head_fx:out_0"  "$sol"
+    bagla "gx_head_fx:out_1"  "$sag"
+}
+
+kanal_no() { # pw-record çıktısında gitar kanalının sırası
+    case "$KANAL" in
+        *_FR) echo 1 ;;
+        *_AUX[0-9]*) echo "${KANAL##*_AUX}" ;;
+        *) echo 0 ;;
+    esac
+}
+
+# ---------------------------------------------------------------- komutlar
+
+yardim() {
+    cat <<EOF
+gitar $VERSION — elektro gitarı kulaklıktan duy (PipeWire + Guitarix)
+
+Kullanım: gitar <komut>
+
+  amfi            Gitar -> Guitarix (amfi + efekt) -> kulaklık
+  duz             Gitar -> kulaklık (efektsiz, düz ses)
+  kapat           Gitar bağlantılarını kes, Guitarix'i kapat
+  durum           Ayarları ve şu anki bağlantıları göster
+  ses <0-150>     Kulaklık sesini ayarla (ör. gitar ses 70)
+  ton temiz       Guitarix'e temiz amfi ayarını yükle
+  ton crunch      Guitarix'e hafif bozuk (crunch) ayarı yükle
+  olc             10 saniye çal, giriş seviyen iyi mi söylesin
+  ayarla          Ses kartını, gitar kanalını ve kulaklığı seç
+  guncelle        Son sürümü indir
+  surum           Sürümü yazdır
+
+İngilizce karşılıklar da çalışır: amp, direct, stop, status, volume,
+tone clean|crunch, meter, setup, update, version.
+Ayar dosyası: $CONFIG
+EOF
+}
+
+komut="${1:-yardim}"
+[ $# -gt 0 ] && shift
+
+case "$komut" in
+    amfi|amp)
+        kontrol_cihaz
+        duz_kopar
+        guitarix_baslat
+        amfi_bagla
+        bilgi "Hazır: gitar -> Guitarix -> kulaklık 🎸"
+        ;;
+    duz|düz|direct)
+        kontrol_cihaz
+        guitarix_kapat
+        duz_bagla
+        bilgi "Hazır: gitar -> kulaklık (düz ses)"
+        ;;
+    kapat|stop)
+        duz_kopar
+        guitarix_kapat
+        bilgi "Kapatıldı."
+        ;;
+    durum|status)
+        gerekli pw-link pactl
+        bilgi "== Ayarlar ($CONFIG)"
+        bilgi "  giriş : ${GIRIS:-(seçilmedi)} ${KANAL:+[$KANAL]}"
+        bilgi "  çıkış : ${CIKIS:-(seçilmedi)}"
+        bilgi "  gecikme: $GECIKME"
+        bilgi "== Bağlantılar"
+        if [ -n "$GIRIS" ]; then
+            baglar=$(pw-link -l | awk -v g="$GIRIS:$KANAL" '
+                /^[^ \t]/ { goster = ($0 == g || $0 == "gx_head_amp:out_0" || $0 ~ /^gx_head_fx:out_[01]$/) }
+                goster && /\|->/ { print "  " $0 }
+                goster && /^[^ \t]/ { print "  " $0 }')
+            if printf '%s\n' "$baglar" | grep -q -- '|->'; then
+                printf '%s\n' "$baglar"
+            else
+                bilgi "  (gitar bağlı değil)"
+            fi
+        fi
+        bilgi "== Guitarix: $(pgrep -x guitarix >/dev/null && echo açık || echo kapalı)"
+        [ -n "$CIKIS" ] && bilgi "== Kulaklık sesi: $(pactl get-sink-volume "$CIKIS" 2>/dev/null | head -1 | grep -oE '[0-9]+%' | head -1)"
+        ;;
+    ses|volume|vol)
+        gerekli pactl
+        [ -n "$CIKIS" ] || hata "Önce: gitar ayarla"
+        case "${1:-}" in
+            ''|*[!0-9%]*) hata "Kullanım: gitar ses 70" ;;
+        esac
+        seviye="${1%\%}"
+        [ -n "$seviye" ] || hata "Kullanım: gitar ses 70"
+        [ "$seviye" -le 150 ] || hata "150'den yüksek olamaz (kulaklarını koru)."
+        pactl set-sink-volume "$CIKIS" "$seviye%"
+        bilgi "Kulaklık sesi: $seviye%"
+        ;;
+    ton|tone)
+        case "${1:-}" in
+            temiz|clean)  preset=clean_clean ;;
+            crunch)       preset=crunch_vintage_vox ;;
+            *) hata "Kullanım: gitar ton temiz | gitar ton crunch" ;;
+        esac
+        kontrol_cihaz
+        gerekli guitarix
+        duz_kopar
+        bilgi "Ayar yükleniyor (Guitarix birkaç saniye kapanıp açılacak)..."
+        guitarix_kapat
+        guitarix_baslat rpc
+        for _ in $(seq 40); do rpc_acik && break; bekle 0.3; done
+        rpc_acik || hata "Guitarix'e bağlanılamadı (port $RPC_PORT). Başka bir program kullanıyorsa: GITAR_RPC_PORT=7400 gitar ton ${1}"
+        rpc setpreset "[\"Sonnie_Tele\",\"$preset\"]"
+        bekle 0.5
+        if [ "$preset" = clean_clean ]; then
+            rpc set '["gain.gain",4.0,"noise_gate.on_off",1,"noise_gate.threshold",0.017,"zita_rev1.output.dry_wet_mix",-0.5]'
+        else
+            rpc set '["noise_gate.on_off",1]'
+        fi
+        bekle 1
+        guitarix_kapat          # ayarı kaydetsin, portu kapatsın
+        guitarix_baslat
+        amfi_bagla
+        bilgi "\"$1\" yüklendi 🎸  (ses yüksek gelirse: gitar ses 40)"
+        ;;
+    olc|ölç|meter)
+        kontrol_cihaz
+        gerekli pw-record
+        dosya="$RUN_DIR/gitar-olc.wav"
+        kanal_sayisi=$(giris_portlari "$GIRIS" | wc -l)
+        bilgi "10 saniye boyunca çal..."
+        timeout 10 pw-record --target "$GIRIS" --channels "$kanal_sayisi" --format s16 \
+            --rate 48000 "$dosya" 2>/dev/null
+        python3 - "$dosya" "$(kanal_no)" "$kanal_sayisi" <<'PY'
+import array, math, sys, wave
+w = wave.open(sys.argv[1]); idx, n = int(sys.argv[2]), max(1, int(sys.argv[3]))
+d = array.array("h", w.readframes(w.getnframes()))
+kanal = d[idx::n]
+tepe = max((abs(x) for x in kanal), default=0)
+db = 20 * math.log10(max(tepe, 1) / 32768)
+print(f"En yüksek seviye: {db:.1f} dBFS")
+if db > -3:
+    print("Çok yüksek -> ses kartında gain'i biraz kıs.")
+elif db < -24:
+    print("Çok düşük -> gain'i aç. Hiç çıkmıyorsa kanal yanlış olabilir: gitar ayarla")
+else:
+    print("İyi seviye 👍")
+PY
+        rm -f "$dosya"
+        ;;
+    ayarla|setup)
+        ayarla
+        ;;
+    guncelle|güncelle|update)
+        url="https://raw.githubusercontent.com/$REPO/main/install.sh"
+        if command -v curl >/dev/null 2>&1; then
+            curl -fsSL "$url" | sh -s -- --no-deps --no-setup
+        elif command -v wget >/dev/null 2>&1; then
+            wget -qO- "$url" | sh -s -- --no-deps --no-setup
+        else
+            hata "curl ya da wget gerekli."
+        fi
+        ;;
+    surum|sürüm|version|--version|-v)
+        bilgi "gitar $VERSION"
+        ;;
+    yardim|yardım|help|--help|-h)
+        yardim
+        ;;
+    *)
+        yardim >&2
+        exit 2
+        ;;
+esac
