@@ -85,5 +85,5 @@ jobs:
       - name: Format check
         if: steps.detect.outputs.present == 'true'
         run: |
-          files=$(git ls-files engine | grep -E '\.(cpp|hpp|cc|h)$' | grep -v '^engine/third_party/' || true)
-          if [ -n "$files" ]; then clang-format --dry-run --Werror $files; fi
+          git ls-files engine | grep -E '\.(cpp|hpp|cc|h)$' | grep -v '^engine/third_party/' \
+            | xargs -r clang-format --dry-run --Werror

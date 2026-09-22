@@ -50,8 +50,8 @@ pytest
 cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build engine/build
 ctest --test-dir engine/build --output-on-failure
-files=$(git ls-files engine | grep -E '\.(cpp|hpp|cc|h)$' | grep -v '^engine/third_party/' || true)
-[ -z "$files" ] || clang-format --dry-run --Werror $files
+git ls-files engine | grep -E '\.(cpp|hpp|cc|h)$' | grep -v '^engine/third_party/' \
+    | xargs -r clang-format --dry-run --Werror
 ```
 
 ## Rules for agents
