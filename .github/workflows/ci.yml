@@ -28,6 +28,26 @@ jobs:
             shellcheck scripts/*.sh
           fi
 
+  powershell:
+    name: PowerShell scripts (parse)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse install.ps1
+        shell: pwsh
+        run: |
+          $f = "scripts/install.ps1"
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($f, [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors; exit 1 }
+      - name: Parse uninstall.ps1
+        shell: pwsh
+        run: |
+          $f = "scripts/uninstall.ps1"
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($f, [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors; exit 1 }
+
   python:
     name: Python ${{ matrix.python-version }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

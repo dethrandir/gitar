@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  engine-linux:
+    name: Engine (Linux x64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build \
+            libasound2-dev libpulse-dev libjack-jackd2-dev
+      - name: Configure
+        run: cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build engine/build
+      - name: Package
+        run: tar -czf "gitar-engine-${{ github.ref_name }}-linux-x64.tar.gz" -C engine/build gitar-engine
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-linux
+          path: gitar-engine-${{ github.ref_name }}-linux-x64.tar.gz
+          if-no-files-found: error
+
+  engine-windows:
+    name: Engine (Windows x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S engine -B engine/build -G "Visual Studio 17 2022" -A x64
+      - name: Build
+        run: cmake --build engine/build --config Release
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path engine/build/Release/gitar-engine.exe `
+            -DestinationPath "gitar-engine-${{ github.ref_name }}-windows-x64.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-windows
+          path: gitar-engine-${{ github.ref_name }}-windows-x64.zip
+          if-no-files-found: error
+
+  python-wheel:
+    name: Python wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build
+          python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: GitHub release
+    runs-on: ubuntu-latest
+    needs: [engine-linux, engine-windows, python-wheel]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/*

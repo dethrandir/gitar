@@ -29,6 +29,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repository hygiene: `.gitignore`, `.editorconfig`, `.gitattributes`,
   `.clang-format`, and `AGENTS.md`.
 - CI: shellcheck, ruff, mypy, pytest (Linux + Windows), and the engine build.
+- **Windows installers**: `scripts/install.ps1` downloads `gitar-engine.exe`
+  and the wheel from a GitHub release, installs the engine into
+  `%LOCALAPPDATA%\gitar\bin`, updates the user PATH, and installs the wheel with
+  `python -m pip install --user`; `scripts/uninstall.ps1` reverses it.
+- **Release workflow**: `.github/workflows/release.yml` builds the Linux and
+  Windows engine binaries and the Python wheel on `v*` tags and attaches them
+  to a GitHub release.
+- CI parse check for the PowerShell installers.
 
 ### Changed
 

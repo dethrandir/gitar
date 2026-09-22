@@ -67,8 +67,38 @@ instead of downloading.
 
 ### Windows
 
-Windows support (WASAPI) is planned for the v2 engine. Follow
-[`ROADMAP.md`](ROADMAP.md) — M5.
+Windows support (WASAPI) is new and has not yet been tested on real hardware.
+Install from a release with PowerShell 5.1+ (no administrator rights needed;
+the installer only writes to your user profile):
+
+```powershell
+irm https://raw.githubusercontent.com/dethrandir/gitar/main/scripts/install.ps1 | iex
+```
+
+It downloads `gitar-engine.exe` and the control-server wheel from the latest
+GitHub release: the engine is installed into `%LOCALAPPDATA%\gitar\bin` (added
+to your user PATH), and the wheel is installed with `python -m pip install
+--user`. If you cloned the repo, `./scripts/install.ps1` does the same. Options:
+
+```powershell
+./scripts/install.ps1 -Version v2.0.0   # install a specific tag
+./scripts/install.ps1 -NoPython         # engine only
+./scripts/install.ps1 -NoPath           # don't touch the user PATH
+```
+
+Then open a new terminal and start the server and web UI:
+
+```powershell
+gitard serve --open
+```
+
+To uninstall, remove `gitar-engine.exe` and `%APPDATA%\gitar`:
+
+```powershell
+./scripts/uninstall.ps1                 # add -KeepConfig to keep settings and models
+```
+
+The Python package itself is removed with `python -m pip uninstall gitar`.
 
 ## Usage
 
