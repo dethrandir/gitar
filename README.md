@@ -1,81 +1,111 @@
 # gitar
 
-Elektro gitarı USB ses kartından bilgisayarın kulaklık çıkışına bağlayan küçük bir Linux aracı. İstersen sesi önce [Guitarix](https://guitarix.org/) amfi simülatöründen geçirir.
+Route an electric guitar from your audio interface to your headphones — with
+neural amp models, a local web UI, and no fuss.
 
 ```
-Gitar ──► USB ses kartı ──► Guitarix (amfi + kabin + efekt) ──► kulaklık
+Guitar ──► audio interface ──► gitar engine ──► headphones
+                               (neural amp / cabinet / FX)
 ```
 
-Ses kartının kendi kulaklık çıkışını kullanamadığında (jak uymuyor, çıkış bozuk) ya da gitarı amfi sesiyle duymak istediğinde işe yarar. Arka planda PipeWire bağlantılarını (`pw-link`) kurup kaldırır. Kurduğu bağlantılar kalıcı değildir, sistem ayarlarına dokunmaz.
+`gitar` started as a small Linux PipeWire helper that connected a guitar input to
+a headphone output, optionally through the [Guitarix](https://guitarix.org/) amp
+simulator. It is now being rebuilt as a cross-platform app: a native real-time
+audio engine that hosts neural amp models, a Python control server, and a local
+web UI.
 
-*English: a small PipeWire helper that routes an electric guitar from a USB audio interface to your headphones, optionally through the Guitarix amp simulator. The commands and messages are in Turkish; English aliases are listed below.*
+> **Status:** `v2` (cross-platform: Windows + Linux, neural models, web UI) is in
+> active development. The stable, published release is the Linux bash/PipeWire
+> tool documented below. See [`ROADMAP.md`](ROADMAP.md) for progress.
 
-## Kurulum
+## Why
+
+Your audio interface has a guitar input but only one headphone jack — or a broken
+one. `gitar` routes the guitar signal to any output you like, so you can practise
+through headphones instead of an amp. The v2 engine adds neural amp models, so
+you can play through realistic, profiled amps, cabinets, and effects.
+
+## Install
+
+### Linux (stable release)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/install.sh | sh
 ```
 
-Kurulum sırasıyla şunları yapar:
+The installer:
 
-1. Eksik programları dağıtımının paket yöneticisiyle kurar. Bunun için `sudo` şifreni isteyebilir.
-2. `gitar` komutunu `~/.local/bin` klasörüne koyar. Bu adım için root gerekmez.
-3. Ses kartını, gitarın takılı olduğu kanalı ve kulaklık çıkışını sorar.
+1. installs missing packages with your distribution's package manager (it may
+   ask for your `sudo` password),
+2. installs the `gitar` command to `~/.local/bin` (no root needed),
+3. asks which audio interface, channel, and headphone output to use.
 
-| Dağıtım | Paket yöneticisi | Durum |
+| Distribution | Package manager | Status |
 |---|---|---|
-| Fedora | `dnf` | test edildi |
-| Debian, Ubuntu, Mint, Pop!_OS | `apt` | test edildi |
-| Arch, Manjaro, EndeavourOS | `pacman` | test edildi |
-| openSUSE | `zypper` | test edildi |
-| Void | `xbps` | denenmedi |
+| Fedora | `dnf` | tested |
+| Debian, Ubuntu, Mint, Pop!_OS | `apt` | tested |
+| Arch, Manjaro, EndeavourOS | `pacman` | tested |
+| openSUSE | `zypper` | tested |
+| Void | `xbps` | untested |
 
-Başka bir dağıtımda kurulum yine çalışır. Sadece eksik programları senin kurman gerekir: aşağıdaki [Gereksinimler](#gereksinimler) bölümüne bak.
+On other distributions the installer still runs; you just need to install the
+[requirements](#requirements) yourself.
 
-Kurulum seçenekleri:
+Installer options:
 
 ```sh
-# Paketlere dokunmadan sadece komutu kur/güncelle
+# Only install/update the command, don't touch packages
 curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/install.sh | sh -s -- --no-deps
 
-# Başka bir klasöre kur
+# Install to a different directory
 curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/install.sh | GITAR_BIN_DIR=~/bin sh
 ```
 
-Repoyu klonladıysan `./install.sh` de aynı işi yapar ve indirmek yerine yereldeki dosyayı kullanır.
+If you cloned the repo, `./install.sh` does the same job and uses the local file
+instead of downloading.
 
-## Kullanım
+### Windows
+
+Windows support (WASAPI) is planned for the v2 engine. Follow
+[`ROADMAP.md`](ROADMAP.md) — M5.
+
+## Usage
 
 ```sh
-gitar amfi        # çalmaya başla (Guitarix amfisiyle)
+gitar amp         # start playing through the Guitarix amp
 ```
 
-| Komut | Ne yapar |
+| Command | What it does |
 |---|---|
-| `gitar amfi` | Gitar → Guitarix → kulaklık. Guitarix penceresinden düğmeleri çevirebilirsin; kapanınca ayarlarını kendisi kaydeder. |
-| `gitar duz` | Gitar → kulaklık, efektsiz. Akort ederken ya da bir sorunu ayıklarken işe yarar. |
-| `gitar kapat` | Gitar bağlantılarını keser, Guitarix'i kapatır. |
-| `gitar durum` | Ayarları ve şu an neyin neye bağlı olduğunu gösterir. |
-| `gitar ses 70` | Kulaklık sesini %70 yapar (en fazla 150). |
-| `gitar ton temiz` | Guitarix'e temiz lambalı amfi ayarını yükler. |
-| `gitar ton crunch` | Guitarix'e hafif bozuk (Vox tarzı) ayarı yükler. |
-| `gitar olc` | 10 saniye çalarsın; giriş seviyenin iyi olup olmadığını söyler. |
-| `gitar ayarla` | Ses kartını, kanalı ve kulaklığı yeniden seçer. |
-| `gitar guncelle` | Son sürümü indirir. |
+| `gitar amp` | Guitar → Guitarix → headphones. Turn the knobs in the Guitarix window; it saves its settings on exit. |
+| `gitar direct` | Guitar → headphones, no effects. Useful when tuning or debugging. |
+| `gitar stop` | Disconnect the guitar and close Guitarix. |
+| `gitar status` | Show the configuration and what is currently connected to what. |
+| `gitar volume 70` | Set the headphone volume to 70% (maximum 150). |
+| `gitar tone clean` | Load a clean tube-amp preset into Guitarix. |
+| `gitar tone crunch` | Load a light (Vox-style) overdrive preset. |
+| `gitar tone army` | Load a tight, muted-riff JCM-800 preset (Seven Nation Army). |
+| `gitar meter` | Play for 10 seconds; tells you whether your input level is healthy. |
+| `gitar setup` | Re-select the audio interface, channel, and headphone output. |
+| `gitar update` | Download the latest version. |
+| `gitar version` | Print the version. |
 
-İngilizce karşılıklar da çalışır: `amp`, `direct`, `stop`, `status`, `volume`, `tone clean|crunch`, `meter`, `setup`, `update`, `version`.
+Turkish aliases also work: `amfi`, `duz`, `kapat`, `durum`, `ses`, `ton
+temiz|crunch|army`, `olc`, `ayarla`, `guncelle`, `surum`.
 
-### Gain ayarı
+### Setting the gain
 
-Ses kartındaki **gain** (INST / GAIN) düğmesi, gitarın karta ne kadar güçlü girdiğini belirler. Duyduğun sesin yüksekliği ise `gitar ses` ile ayarlanır.
+The **gain** (INST / GAIN) knob on your interface sets how hard the guitar hits
+the interface. How loud you hear it is set separately with `gitar volume`.
 
-- Normal çalarken ses kartındaki **clip** ışığı yanmamalı. En sert vuruşta arada bir yanması sorun değil.
-- `gitar olc` çıktısında **−18 ile −6 dBFS** arası iyi bir seviyedir.
-- Ses çok kısıksa ya da hiç gelmiyorsa ilk bakman gereken yer gain düğmesi.
+- The **clip** LED should stay off during normal playing. The occasional flash on
+  the hardest pick is fine.
+- A reading between **−18 and −6 dBFS** from `gitar meter` is healthy.
+- If it is very quiet or silent, check the gain knob first.
 
-## Ayarlar
+## Configuration
 
-`gitar ayarla` bu dosyayı oluşturur: `~/.config/gitar/config`
+`gitar setup` writes `~/.config/gitar/config`:
 
 ```sh
 GIRIS=alsa_input.usb-Burr-Brown_from_TI_USB_Audio_CODEC-00.analog-stereo-input
@@ -84,60 +114,52 @@ CIKIS=alsa_output.usb-C-Media_Electronics_Inc._USB_Audio_Device-00.analog-stereo
 GECIKME=128/48000
 ```
 
-| Değişken | Anlamı |
+| Variable | Meaning |
 |---|---|
-| `GIRIS` | Gitarın takılı olduğu ses kartı. Listeyi görmek için: `pactl list short sources` |
-| `KANAL` | O karttaki gitar kanalı. İki girişli kartlarda genelde 1. giriş `capture_FL`, 2. giriş `capture_FR` olur. |
-| `CIKIS` | Kulaklığın takılı olduğu çıkış. Listeyi görmek için: `pactl list short sinks` |
-| `GECIKME` | Buffer boyutu / örnekleme hızı. `128/48000` yaklaşık 2.7 ms'dir. Cızırtı olursa `256/48000` yap. |
+| `GIRIS` | The interface the guitar is plugged into. List them with `pactl list short sources`. |
+| `KANAL` | The guitar channel on that interface. On two-input interfaces the first input is usually `capture_FL`, the second `capture_FR`. |
+| `CIKIS` | The headphone output. List them with `pactl list short sinks`. |
+| `GECIKME` | Buffer size / sample rate. `128/48000` is about 2.7 ms. Use `256/48000` if you hear crackling. |
 
-`GITAR_RPC_PORT` ortam değişkeni, `gitar ton` komutunun Guitarix'le konuştuğu portu değiştirir (varsayılan 7342).
+The config keys are currently Turkish; the v2 control server migrates them to
+English (`input`, `channel`, `output`, `latency`) while reading the old file.
 
-## Gereksinimler
+`GITAR_RPC_PORT` changes the port `gitar tone` uses to talk to Guitarix
+(default `7342`).
 
-- Linux ve ses sunucusu olarak **PipeWire**. Güncel Fedora, Ubuntu, Debian ve Arch'ta varsayılan olarak geliyor.
+## Requirements
+
+Linux with **PipeWire** as the sound server (the default on current Fedora,
+Ubuntu, Debian, and Arch).
+
 - `bash`, `python3`, `pgrep` (procps)
-- PipeWire araçları: `pw-link`, `pw-record`
+- PipeWire tools: `pw-link`, `pw-record`
 - `pactl` (pulseaudio-utils / libpulse)
-- `guitarix`, sadece `amfi` ve `ton` komutları için
-- `pw-jack` (pipewire-jack). JACK kütüphanesi PipeWire'a yönlendirilmemiş sistemlerde Guitarix'in çalışması için gerekir.
+- `guitarix` — only for `amp` and `tone`
+- `pw-jack` (pipewire-jack) — for Guitarix on systems whose JACK library is not
+  routed to PipeWire
 
-## Kaldırma
+## Uninstall
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/uninstall.sh | sh
 ```
 
-Bu komut `gitar` komutunu ve `~/.config/gitar` klasörünü siler. Ayarlarını tutmak için komutu `| sh -s -- --keep-config` ile bitir. Kurulumun yüklediği paketler ve Guitarix'in kendi ayarları (`~/.config/guitarix`) olduğu gibi kalır.
+This removes the `gitar` command and `~/.config/gitar`. Add
+`| sh -s -- --keep-config` to keep your settings. Packages installed by the
+installer and Guitarix's own settings (`~/.config/guitarix`) are left alone.
 
-## Sorun giderme
+## Documentation
 
-**Hiç ses yok.**
-Önce `gitar durum` yaz. Bağlantı yoksa `gitar amfi` çalıştır. Sonra `gitar duz` dene:
-- Düz modda duyuyorsan sorun Guitarix'te.
-- Düz modda da duymuyorsan gain düğmesine ya da kablolara bak.
+- [`docs/architecture.md`](docs/architecture.md) — how gitar is built (v2).
+- [`docs/troubleshooting.md`](docs/troubleshooting.md) — common problems and fixes.
+- [`ROADMAP.md`](ROADMAP.md) — the plan and its progress.
 
-Ses kartının sinyal ışığı çalarken hiç yanmıyorsa ses karta hiç ulaşmıyordur.
+## Development
 
-**Tek kulaktan geliyor ya da `gitar olc` "çok düşük" diyor.**
-Kanal yanlış seçilmiş olabilir. `gitar ayarla` ile diğer kanalı (`capture_FL` / `capture_FR`) dene.
+See [`AGENTS.md`](AGENTS.md) for the build/test commands and
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution workflow.
 
-**Cızırtı, çıtırtı, kesik kesik ses.**
-Ayar dosyasında `GECIKME=256/48000` yap. Sonra `gitar kapat` ve `gitar amfi` çalıştır.
-
-**"Gitar girişi bulunamadı".**
-Ses kartını çıkarıp tak. Başka bir kart kullanıyorsan `gitar ayarla` ile yeniden seç.
-
-**Guitarix açılmıyor.**
-Logu oku: `$XDG_RUNTIME_DIR/gitar-guitarix.log`. Çoğu zaman sebep `pipewire-jack` paketinin eksik olmasıdır.
-
-## Nasıl çalışıyor
-
-- **`duz`:** gitar kanalını çıkışın sol ve sağ portlarına `pw-link` ile bağlar. Mono kartlarda da iki kulaktan duyulur.
-- **`amfi`:** Guitarix'i `-J` ile (kendi kendine bağlanmadan) başlatır ve zinciri elle kurar: `giriş → gx_head_amp → gx_head_fx → çıkış`.
-- **`ton`:** Guitarix'i birkaç saniyeliğine JSON-RPC portuyla açar, hazır ayarı yükler, sonra portsuz yeniden başlatır. Guitarix bu portu yalnızca bu bilgisayara kısıtlayamadığı, tüm ağ arayüzlerinde dinlediği için port hep açık bırakılmaz.
-- **`olc`:** `pw-record` ile 10 saniye kayıt alır ve gitar kanalının en yüksek seviyesini dBFS olarak hesaplar.
-
-## Lisans
+## License
 
 [MIT](LICENSE)
