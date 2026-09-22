@@ -20,7 +20,7 @@ This document describes how `gitar` is built. It is a living document; see
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ web/                        local control panel             │
+│ src/gitar_server/web/       local control panel (static)     │
 │   static HTML/CSS/JS, no build step                         │
 └───────────────▲─────────────────────────────────────────────┘
                 │ HTTP + WebSocket (localhost)
@@ -43,8 +43,9 @@ This document describes how `gitar` is built. It is a living document; see
   dependencies.
 - Neural inference from `.nam` models, reusing the upstream
   NeuralAmpModelerCore DSP rather than reimplementing WaveNet.
-- Signal chain (target): `input → gain → noise gate → NAM amp → EQ → cabinet IR
-  → output`.
+- Signal chain: `input → gain → noise gate → NAM amp → output`. A three-band EQ
+  and a cabinet IR stage (the latter via a WAV impulse response loaded as a
+  linear NAM model) are planned.
 - Exposes a small JSON control protocol on a localhost socket to the Python
   server. Audio state changes are applied on the audio thread through lock-free
   parameter passing.
@@ -54,12 +55,19 @@ This document describes how `gitar` is built. It is a living document; see
 ### Control server (`src/gitar_server/`)
 
 - FastAPI + Uvicorn. Only binds to `127.0.0.1`.
-- `backends/` contains platform backends behind one interface:
-  - `PipeWireBackend` — Linux, wraps `pw-link` / `pactl` / Guitarix (a port of
-    the legacy bash logic).
-  - `WasapiBackend` — Windows, drives the native engine.
-  - The active backend is selected by platform, not by the UI.
-- Serves the static web UI from `web/`.
+- Modules:
+  - `config.py` — platform-aware config with legacy bash migration.
+  - `devices.py` — PipeWire device/port discovery (`pactl`, `pw-link`).
+  - `levels.py` — WAV level analysis for the meter.
+  - `backends/` — one interface (`AudioBackend`) with platform backends:
+    `PipeWireBackend` (Linux, wraps `pw-link`/`pactl`/Guitarix, a port of the
+    legacy bash logic), `WasapiBackend` (Windows placeholder), and
+    `NullBackend` (tests/unsupported platforms).
+  - `engine_client.py` — synchronous client for the engine control protocol.
+  - `engine_controller.py` — spawns and drives the `gitar-engine` process.
+  - `models.py` — `.nam` model registry.
+  - `api/` — REST routes, WebSocket telemetry, and the engine router.
+- Serves the static web UI from `src/gitar_server/web/`.
 - Never links audio libraries.
 
 ### Web UI (`web/`)

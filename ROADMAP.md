@@ -14,6 +14,21 @@ work by running the gate commands**. See `AGENTS.md` for conventions.
 - English by default, installable on Linux and Windows,
 - reproducible builds, tests, and CI.
 
+## Current state
+
+Phases M0–M3 are implemented and green (Python: ruff/mypy/pytest; engine:
+cmake build + ctest + clang-format; CI covers shell, Python on Linux and
+Windows, and the engine).
+
+- A working control plane: `gitard` serves a local web UI and JSON API.
+- A native engine (`gitar-engine`) that routes capture→playback across
+  devices and runs a noise gate + NAM model in the audio path.
+- The Python server spawns and drives the engine, scans `.nam` models, and
+  exposes them in the web UI.
+
+Still open: EQ/cab IR (M3.2b), UI polish (M4), Windows packaging (M5), and
+release packaging (M6).
+
 ## Architecture
 
 ```
@@ -55,30 +70,33 @@ gitar/
 - [x] M0.5 C++ tooling config (.clang-format)
 
 ### M1 — Control server + web UI + Linux PipeWire backend
-- [ ] M1.1 Config module (XDG + Windows paths), TDD
-- [ ] M1.2 pactl/PipeWire parsing + device discovery, TDD
-- [ ] M1.3 Backend abstraction + PipeWireBackend (port of bash logic), TDD
-- [ ] M1.4 FastAPI app: REST + WebSocket telemetry, TDD
-- [ ] M1.5 Web UI MVP (devices, connect/disconnect, volume, level meter)
-- [ ] M1.6 `gitard` CLI + installer integration
-- [ ] M1.7 Windows WASABIBackend stub + detection
+- [x] M1.1 Config module (XDG + Windows paths), TDD
+- [x] M1.2 pactl/PipeWire parsing + device discovery, TDD
+- [x] M1.3 Backend abstraction + factory + null backend, TDD
+- [x] M1.3b PipeWireBackend (port of bash logic), TDD
+- [x] M1.4 FastAPI app: REST + WebSocket telemetry, TDD
+- [x] M1.5 Web UI MVP (devices, connect/disconnect, volume, level meter)
+- [x] M1.6 `gitard` CLI (serve command)
+- [x] M1.7 Windows WASABIBackend stub + detection
 
 ### M2 — Native engine skeleton
-- [ ] M2.1 CMake project + vendored miniaudio + passthrough, unit tests
-- [ ] M2.2 Device I/O, latency config, lock-free ring buffer, level meter
+- [x] M2.1 CMake project + vendored miniaudio + ring buffer/level meter, unit tests
+- [ ] M2.2 Device I/O (cross-device bridge), gain processor, device enumeration
 - [ ] M2.3 JSON control protocol over localhost + Python engine client, TDD
 - [ ] M2.4 Engine CLI (list devices, run, latency)
 
 ### M3 — Neural amp models
-- [ ] M3.1 Integrate NAM DSP core, `.nam` loader, unit tests
-- [ ] M3.2 DSP chain: gate → NAM amp → EQ → cab IR → output
-- [ ] M3.3 Model registry + preset format (server side), TDD
-- [ ] M3.4 Web UI: model browser, chain editor, tuner, spectrum
+- [x] M3.1 Integrate NAM DSP core, `.nam` loader, unit tests
+- [x] M3.2 DSP chain: gate → NAM amp → output, model swap over the protocol
+- [ ] M3.2b EQ + cabinet IR stage
+- [x] M3.3 Model registry + engine process control + engine API, TDD
+- [x] M3.4 Web UI: engine panel + model browser
 
 ### M4 — Web UI polish
 - [ ] M4.1 Knobs/faders component, responsive layout, dark theme
-- [ ] M4.2 Recording + metronome + tuner
-- [ ] M4.3 Preset save/load/share
+- [ ] M4.2 Tuner + spectrum analyzer
+- [ ] M4.3 Recording + metronome
+- [ ] M4.4 Preset save/load/share
 
 ### M5 — Windows
 - [ ] M5.1 WASAPI shared/exclusive device enumeration + selection

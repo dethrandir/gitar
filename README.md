@@ -14,9 +14,10 @@ simulator. It is now being rebuilt as a cross-platform app: a native real-time
 audio engine that hosts neural amp models, a Python control server, and a local
 web UI.
 
-> **Status:** `v2` (cross-platform: Windows + Linux, neural models, web UI) is in
-> active development. The stable, published release is the Linux bash/PipeWire
-> tool documented below. See [`ROADMAP.md`](ROADMAP.md) for progress.
+> **Status:** `v2` is in active development. The control server, local web UI,
+> and native engine (with NAM neural amp models) already work on Linux; Windows
+> and release packaging are next. The stable, published release is the Linux
+> bash/PipeWire tool documented below. See [`ROADMAP.md`](ROADMAP.md).
 
 ## Why
 
@@ -159,6 +160,25 @@ installer and Guitarix's own settings (`~/.config/guitarix`) are left alone.
 
 See [`AGENTS.md`](AGENTS.md) for the build/test commands and
 [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution workflow.
+
+### Running the v2 engine and web UI (Linux, in progress)
+
+```sh
+# 1. Build the native engine (downloads pinned Eigen + NAM on first configure)
+cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build engine/build
+
+# 2. Install the Python control server
+python3 -m venv .venv && . .venv/bin/activate
+python -m pip install -e ".[dev]"
+
+# 3. Serve the web UI (spawns the engine on demand)
+gitard serve --open
+```
+
+Then open <http://127.0.0.1:7343>. Put `.nam` models in
+`~/.config/gitar/models/` (or set `GITAR_MODELS_DIR`) and select one in the
+**Engine** panel.
 
 ## License
 
