@@ -14,10 +14,10 @@ simulator. It is now being rebuilt as a cross-platform app: a native real-time
 audio engine that hosts neural amp models, a Python control server, and a local
 web UI.
 
-> **Status:** `v2` is in active development. The control server, local web UI,
-> and native engine (with NAM neural amp models) already work on Linux; Windows
-> and release packaging are next. The stable, published release is the Linux
-> bash/PipeWire tool documented below. See [`ROADMAP.md`](ROADMAP.md).
+> **Status:** `v2` is released ([v2.0.0](https://github.com/dethrandir/gitar/releases/tag/v2.0.0))
+> — a cross-platform app with a native audio engine, a Python control server, a
+> local web UI, and NAM neural amp models on Linux and Windows. The v1 PipeWire
+> bash CLI remains available and is documented below. See [`ROADMAP.md`](ROADMAP.md).
 
 ## Why
 
@@ -65,7 +65,7 @@ curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/install.sh | 
 If you cloned the repo, `./install.sh` does the same job and uses the local file
 instead of downloading.
 
-### Linux (v2, preview)
+### Linux (v2)
 
 The v2 stack (native engine + Python control server) installs from a GitHub
 release with a no-root one-liner:
@@ -74,8 +74,11 @@ release with a no-root one-liner:
 curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/scripts/install-v2.sh | sh
 ```
 
-It installs the `gitar-engine` binary into `~/.local/bin` and the control-server
-wheel with `python -m pip install --user`. Options:
+It installs the `gitar-engine` binary into `~/.local/bin` and the control server
+into a dedicated virtualenv (`~/.local/share/gitar/venv`, overridable with
+`GITAR_DATA_DIR`), exposing a `gitard` wrapper in `~/.local/bin`. Using a venv
+means it also works with externally-managed Pythons (PEP 668, e.g. Homebrew).
+Options:
 
 ```sh
 # Install a specific tag
@@ -89,7 +92,7 @@ curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/scripts/insta
 ```
 
 Then start the server and web UI with `gitard serve --open`. The v1 PipeWire CLI
-above remains the stable release.
+above is still available for the Guitarix route.
 
 ### Windows
 
@@ -217,7 +220,7 @@ installer and Guitarix's own settings (`~/.config/guitarix`) are left alone.
 See [`AGENTS.md`](AGENTS.md) for the build/test commands and
 [`CONTRIBUTING.md`](CONTRIBUTING.md) for the contribution workflow.
 
-### Running the v2 engine and web UI (Linux, in progress)
+### Running the v2 engine and web UI (from source)
 
 The quick path is `./run.sh`. It builds the engine if needed, sets up `.venv` if
 needed, and starts the web UI:
