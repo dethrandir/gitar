@@ -132,4 +132,14 @@ jobs:
       - name: Build
         run: cmake --build engine/build
       - name: Test
-        run: ctest --test-dir engine/build --output-on-failure
+        shell: pwsh
+        run: |
+          $exe = ".\engine\build\tests\gitar_engine_tests.exe"
+          $process = Start-Process -FilePath $exe -NoNewWindow -PassThru
+          if (-not $process.WaitForExit(120000)) {
+            $process.Kill()
+            throw "engine tests timed out"
+          }
+          if ($process.ExitCode -ne 0) {
+            throw "engine tests failed (exit $($process.ExitCode))"
+          }
