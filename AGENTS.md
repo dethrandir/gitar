@@ -31,6 +31,19 @@ python3 -m venv .venv
 python -m pip install -e ".[dev]"
 ```
 
+## Versioning
+
+The Python package version (`src/gitar_server/__init__.py`) and the engine
+version (`engine/include/gitar/version.hpp`) must match; `tests/test_version.py`
+enforces this. Bump both together with:
+
+```sh
+python scripts/bump_version.py <major|minor|patch>
+python scripts/bump_version.py 2.1.0
+```
+
+Add a `CHANGELOG.md` entry for every version change.
+
 ## Gate commands (must pass before a commit)
 
 Run the ones that apply to what changed:

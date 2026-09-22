@@ -37,6 +37,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Windows engine binaries and the Python wheel on `v*` tags and attaches them
   to a GitHub release.
 - CI parse check for the PowerShell installers.
+- **Version sync guard** (`tests/test_version.py`): the Python package and
+  engine versions must match, and `scripts/bump_version.py` bumps both at once
+  (`major`/`minor`/`patch` or an explicit version).
+- **PyPI publishing**: the release workflow publishes the wheel and sdist to
+  PyPI via OIDC trusted publishing.
 
 ### Changed
 
