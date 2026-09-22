@@ -65,6 +65,32 @@ curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/install.sh | 
 If you cloned the repo, `./install.sh` does the same job and uses the local file
 instead of downloading.
 
+### Linux (v2, preview)
+
+The v2 stack (native engine + Python control server) installs from a GitHub
+release with a no-root one-liner:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/scripts/install-v2.sh | sh
+```
+
+It installs the `gitar-engine` binary into `~/.local/bin` and the control-server
+wheel with `python -m pip install --user`. Options:
+
+```sh
+# Install a specific tag
+curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/scripts/install-v2.sh | sh -s -- --version v2.0.0
+
+# Engine only, no Python control server
+curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/scripts/install-v2.sh | sh -s -- --no-python
+
+# Install the engine somewhere else
+curl -fsSL https://raw.githubusercontent.com/dethrandir/gitar/main/scripts/install-v2.sh | sh -s -- --bin-dir ~/bin
+```
+
+Then start the server and web UI with `gitard serve --open`. The v1 PipeWire CLI
+above remains the stable release.
+
 ### Windows
 
 Windows support (WASAPI) is new and has not yet been tested on real hardware.

@@ -29,6 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Repository hygiene: `.gitignore`, `.editorconfig`, `.gitattributes`,
   `.clang-format`, and `AGENTS.md`.
 - CI: shellcheck, ruff, mypy, pytest (Linux + Windows), and the engine build.
+- **Linux v2 installer** (`scripts/install-v2.sh`): a no-root one-liner that
+  downloads `gitar-engine` and the control-server wheel from a GitHub release,
+  with `--version`, `--bin-dir`, `--no-python`, and `--no-engine` options.
 - **Windows installers**: `scripts/install.ps1` downloads `gitar-engine.exe`
   and the wheel from a GitHub release, installs the engine into
   `%LOCALAPPDATA%\gitar\bin`, updates the user PATH, and installs the wheel with

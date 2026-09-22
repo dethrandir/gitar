@@ -50,7 +50,7 @@ Run the ones that apply to what changed:
 
 ```sh
 # Shell
-shellcheck install.sh uninstall.sh gitar run.sh scripts/*.sh
+shellcheck install.sh uninstall.sh gitar run.sh scripts/install-v2.sh scripts/*.sh
 
 # PowerShell (Windows): parse-only syntax gate. CI runs this on windows-latest
 # for scripts/install.ps1, scripts/uninstall.ps1, and scripts/run.ps1; there is

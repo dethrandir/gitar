@@ -23,7 +23,7 @@ jobs:
       - name: shellcheck
         run: |
           set -eu
-          shellcheck install.sh uninstall.sh gitar run.sh
+          shellcheck install.sh uninstall.sh gitar run.sh scripts/install-v2.sh
           if compgen -G "scripts/*.sh" > /dev/null; then
             shellcheck scripts/*.sh
           fi
