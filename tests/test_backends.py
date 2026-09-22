@@ -128,9 +128,11 @@ def test_get_backend_linux_returns_pipewire() -> None:
     assert isinstance(get_backend("linux"), PipeWireBackend)
 
 
-def test_get_backend_windows_falls_back_to_null() -> None:
-    assert isinstance(get_backend("win32"), NullBackend)
-    assert isinstance(get_backend("cygwin"), NullBackend)
+def test_get_backend_windows_returns_wasapi() -> None:
+    from gitar_server.backends.wasapi import WasapiBackend
+
+    assert isinstance(get_backend("win32"), WasapiBackend)
+    assert isinstance(get_backend("cygwin"), WasapiBackend)
 
 
 def test_get_backend_unknown_platform_is_null() -> None:
