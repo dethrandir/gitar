@@ -32,7 +32,7 @@ void write_le32(std::ostream& out, std::uint32_t value) {
 
 }  // namespace
 
-Recorder::Recorder() = default;
+Recorder::Recorder() : input_(std::make_unique<SpscRingBuffer<float, kCapacity>>()) {}
 
 Recorder::~Recorder() {
     stop();
@@ -116,13 +116,13 @@ void Recorder::write(const float* interleaved, std::size_t frames) {
     for (std::size_t frame = 0; frame < frames; ++frame) {
         // Drop whole frames so the channel interleaving stays aligned even though
         // the ring buffer stores flat samples.
-        if (input_.size() + channels > kCapacity) {
+        if (input_->size() + channels > kCapacity) {
             ++dropped;
             continue;
         }
         const float* const source = interleaved + frame * channels;
         for (std::size_t channel = 0; channel < channels; ++channel) {
-            input_.push(source[channel]);
+            input_->push(source[channel]);
         }
     }
     if (dropped != 0) {
@@ -164,15 +164,15 @@ void Recorder::pump(std::vector<float>& scratch) {
         return;
     }
     const std::size_t max_frames = scratch.size() / channels;
-    while (input_.size() >= channels) {
-        const std::size_t frames = std::min(max_frames, input_.size() / channels);
+    while (input_->size() >= channels) {
+        const std::size_t frames = std::min(max_frames, input_->size() / channels);
         if (frames == 0) {
             break;
         }
         const std::size_t count = frames * channels;
         for (std::size_t i = 0; i < count; ++i) {
             float sample = 0.0f;
-            input_.pop(sample);
+            input_->pop(sample);
             scratch[i] = sample;
         }
         write_samples(scratch.data(), count);

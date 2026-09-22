@@ -38,14 +38,14 @@ using socklen_type = int;
 constexpr socket_t kInvalidSocket = INVALID_SOCKET;
 
 std::once_flag g_winsock_once;
+bool g_winsock_ready = false;
 
 bool ensure_winsock() {
-    bool ready = false;
-    std::call_once(g_winsock_once, [&ready] {
+    std::call_once(g_winsock_once, [] {
         WSADATA data;
-        ready = WSAStartup(MAKEWORD(2, 2), &data) == 0;
+        g_winsock_ready = WSAStartup(MAKEWORD(2, 2), &data) == 0;
     });
-    return ready;
+    return g_winsock_ready;
 }
 #else
 using socket_t = int;

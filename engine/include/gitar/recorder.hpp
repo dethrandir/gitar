@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -54,7 +55,9 @@ class Recorder {
     void write_samples(const float* samples, std::size_t count);
     void finalize();
 
-    SpscRingBuffer<float, kCapacity> input_;
+    // Heap-allocated so a Recorder can live on a stack with a small limit
+    // (Windows defaults to 1 MB); the buffer alone is 1 MB.
+    std::unique_ptr<SpscRingBuffer<float, kCapacity>> input_;
     std::thread worker_;
     std::mutex mutex_;
     std::condition_variable cv_;
