@@ -82,8 +82,9 @@ jobs:
     name: PyPI publish
     runs-on: ubuntu-latest
     needs: [python-wheel]
-    # The PyPI project must be configured for trusted publishing with this
-    # repository and the "pypi" environment before releases can be published.
+    # Opt-in: set the repository variable PYPI_PUBLISH to "true" after the PyPI
+    # project is configured for trusted publishing with this repository.
+    if: vars.PYPI_PUBLISH == 'true'
     environment: pypi
     permissions:
       id-token: write

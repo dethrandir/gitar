@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-23
+
 ### Added
 
 - **Native engine** (`gitar-engine`, C++20): cross-device capture→playback
@@ -49,8 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Version sync guard** (`tests/test_version.py`): the Python package and
   engine versions must match, and `scripts/bump_version.py` bumps both at once
   (`major`/`minor`/`patch` or an explicit version).
-- **PyPI publishing**: the release workflow publishes the wheel and sdist to
-  PyPI via OIDC trusted publishing.
+- **PyPI publishing**: the release workflow can publish the wheel and sdist to
+  PyPI via OIDC trusted publishing; it is opt-in behind the `PYPI_PUBLISH`
+  repository variable.
 
 ### Changed
 
@@ -69,5 +72,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `install.sh` multi-distribution installer (dnf, apt, pacman, zypper, xbps) and
   `uninstall.sh`.
 
-[Unreleased]: https://github.com/dethrandir/gitar/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/dethrandir/gitar/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/dethrandir/gitar/releases/tag/v2.0.0
 [1.0.0]: https://github.com/dethrandir/gitar/releases/tag/v1.0.0
