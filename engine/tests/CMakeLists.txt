@@ -20,3 +20,4 @@ target_compile_definitions(gitar_engine_tests PRIVATE
 gitar_set_warnings(gitar_engine_tests)
 
 add_test(NAME engine_tests COMMAND gitar_engine_tests)
+set_tests_properties(engine_tests PROPERTIES TIMEOUT 120)

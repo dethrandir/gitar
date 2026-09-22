@@ -23,6 +23,7 @@
 #else
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -544,6 +545,18 @@ void ControlServer::Impl::run() {
         }
         if (listening == kInvalidSocket) {
             break;
+        }
+
+        // Poll with a timeout instead of blocking in accept(): closing or
+        // shutting down a listening socket does not reliably wake a blocked
+        // accept() on Windows.
+        fd_set read_set;
+        FD_ZERO(&read_set);
+        FD_SET(listening, &read_set);
+        timeval timeout{};
+        timeout.tv_usec = 100000;  // 100 ms
+        if (::select(static_cast<int>(listening) + 1, &read_set, nullptr, nullptr, &timeout) <= 0) {
+            continue;
         }
 
         sockaddr_in address{};
