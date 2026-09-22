@@ -421,6 +421,55 @@ button:focus-visible {
   opacity: 0;
 }
 
+.spectrum {
+  margin-top: 0.9rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+
+.spectrum-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.spectrum-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 5rem;
+}
+
+.spectrum-bar {
+  display: flex;
+  flex: 1 1 0;
+  align-items: flex-end;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--bg);
+}
+
+.spectrum-fill {
+  width: 100%;
+  height: 0;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--error), var(--warn) 45%, var(--ok));
+  background-position: bottom;
+  background-repeat: no-repeat;
+  background-size: 100% 5rem;
+  transition: height 0.12s linear;
+}
+
+.spectrum[data-state="idle"] .spectrum-fill {
+  opacity: 0.25;
+}
+
 @media (min-width: 640px) {
   .fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));

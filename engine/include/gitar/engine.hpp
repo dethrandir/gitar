@@ -1,8 +1,11 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
+
+#include "gitar/spectrum_analyzer.hpp"
 
 namespace gitar {
 
@@ -71,6 +74,10 @@ class Engine {
     // (including while the engine is not running).
     float pitch_hz() const;
     float pitch_confidence() const;
+
+    // Smoothed log-band input spectrum in dB, each band mapped from -120 to 0.
+    // All bands read -120 while the engine is not running.
+    std::array<float, SpectrumAnalyzer::kBandCount> spectrum_db() const;
 
     double latency_ms() const;
     std::uint32_t sample_rate() const;

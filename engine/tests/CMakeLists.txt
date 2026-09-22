@@ -3,6 +3,7 @@ add_executable(gitar_engine_tests
     test_ring_buffer.cpp
     test_level_meter.cpp
     test_pitch_detector.cpp
+    test_spectrum_analyzer.cpp
     test_bridge.cpp
     test_processor.cpp
     test_noise_gate.cpp

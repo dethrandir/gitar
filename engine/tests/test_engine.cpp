@@ -137,3 +137,12 @@ TEST_CASE("the gate settings round-trip and clamp") {
     engine.set_gate_threshold_db(20.0f);
     CHECK(engine.gate_threshold_db() == doctest::Approx(0.0f));
 }
+
+TEST_CASE("spectrum_db is silent while the engine is stopped") {
+    gitar::Engine engine;
+    const auto bands = engine.spectrum_db();
+    CHECK(bands.size() == gitar::SpectrumAnalyzer::kBandCount);
+    for (float db : bands) {
+        CHECK(db == doctest::Approx(-120.0f));
+    }
+}

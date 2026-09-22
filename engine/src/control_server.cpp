@@ -114,6 +114,7 @@ json engine_status(Engine& engine) {
         {"output_peak_db", engine.output_peak_db()},
         {"pitch_hz", engine.pitch_hz()},
         {"pitch_confidence", engine.pitch_confidence()},
+        {"spectrum_db", engine.spectrum_db()},
         {"latency_ms", engine.latency_ms()},
         {"sample_rate", engine.sample_rate()},
         {"period_frames", engine.period_frames()},

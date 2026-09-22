@@ -59,6 +59,8 @@
     tunerNote: document.getElementById("tuner-note"),
     tunerCents: document.getElementById("tuner-cents"),
     tunerNeedle: document.getElementById("tuner-needle"),
+    engineSpectrum: document.getElementById("engine-spectrum"),
+    engineSpectrumBars: document.getElementById("engine-spectrum-bars"),
   };
 
   const state = {
@@ -67,11 +69,14 @@
     engineAvailable: true,
     engineRunning: false,
     eqDragging: false,
+    spectrumFills: [],
   };
 
   const ENGINE_POLL_MS = 500;
   const TUNER_POLL_MS = 200;
   const LEVEL_MIN_DB = -60;
+  const SPECTRUM_MIN_DB = -60;
+  const SPECTRUM_BANDS = 24;
   const EQ_DEBOUNCE_MS = 200;
   const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -468,6 +473,38 @@
     elements.engineTuner.dataset.state = Math.abs(cents) <= 5 ? "in-tune" : "active";
   }
 
+  function buildSpectrumBars() {
+    const fills = [];
+    for (let i = 0; i < SPECTRUM_BANDS; i += 1) {
+      const bar = document.createElement("div");
+      bar.className = "spectrum-bar";
+      const fill = document.createElement("div");
+      fill.className = "spectrum-fill";
+      bar.append(fill);
+      elements.engineSpectrumBars.append(bar);
+      fills.push(fill);
+    }
+    state.spectrumFills = fills;
+  }
+
+  function spectrumPercent(db) {
+    if (typeof db !== "number" || !Number.isFinite(db)) return 0;
+    const clamped = Math.max(SPECTRUM_MIN_DB, Math.min(0, db));
+    return ((clamped - SPECTRUM_MIN_DB) / -SPECTRUM_MIN_DB) * 100;
+  }
+
+  function renderSpectrum(status) {
+    const fills = state.spectrumFills;
+    if (fills.length === 0) return;
+    const running = Boolean(status && status.running);
+    const bands = running && Array.isArray(status.spectrum_db) ? status.spectrum_db : [];
+    for (let i = 0; i < fills.length; i += 1) {
+      const db = i < bands.length ? bands[i] : SPECTRUM_MIN_DB;
+      fills[i].style.height = `${spectrumPercent(db)}%`;
+    }
+    elements.engineSpectrum.dataset.state = running ? "active" : "idle";
+  }
+
   function renderEngineStatus(status) {
     state.engineAvailable = true;
     state.engineRunning = Boolean(status.running);
@@ -475,6 +512,7 @@
     renderEngineDetails(status);
     renderEngineLevels(status);
     renderTuner(status);
+    renderSpectrum(status);
     if (typeof status.gain === "number") {
       elements.engineGain.value = String(status.gain);
       renderGainValue(status.gain);
@@ -513,6 +551,7 @@
     elements.engineInputPeak.textContent = "—";
     elements.engineOutputPeak.textContent = "—";
     renderTuner(null);
+    renderSpectrum(null);
   }
 
   async function refreshEngineStatus() {
@@ -523,13 +562,16 @@
     }
   }
 
-  // The tuner needs a faster cadence than the control poll, so it keeps its own
-  // timer and only touches the readout.
+  // The tuner and spectrum need a faster cadence than the control poll, so they
+  // keep their own timer and only touch their readouts.
   async function refreshTunerStatus() {
     try {
-      renderTuner(await api("/api/engine/status"));
+      const status = await api("/api/engine/status");
+      renderTuner(status);
+      renderSpectrum(status);
     } catch {
       renderTuner(null);
+      renderSpectrum(null);
     }
   }
 
@@ -900,6 +942,7 @@
     renderGainValue(Number(elements.engineGain.value));
     renderGateValue(Number(elements.engineGateThreshold.value));
     renderEqValues();
+    buildSpectrumBars();
     connectWs();
     startEnginePolling();
     startTunerPolling();
