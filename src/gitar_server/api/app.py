@@ -118,6 +118,21 @@ def create_app(backend: AudioBackend | None = None, *, web_dir: Path | None = No
             "default_sink": devices_module.default_sink(),
         }
 
+    @app.get("/api/ports")
+    def list_ports(
+        device: str,
+        kind: Literal["source", "sink"] = "source",
+    ) -> dict[str, list[str]]:
+        ports = (
+            devices_module.capture_ports(device)
+            if kind == "source"
+            else devices_module.playback_ports(device)
+        )
+        prefix = f"{device}:"
+        return {
+            "ports": [port[len(prefix) :] if port.startswith(prefix) else port for port in ports]
+        }
+
     @app.get("/api/status")
     def status() -> dict[str, Any]:
         return _status_payload(audio.status(load_config()))

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>gitar</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <h1>gitar</h1>
+        <span class="version" id="version">&mdash;</span>
+      </div>
+      <div class="pill" id="pill" data-state="offline" role="status" aria-live="polite">
+        <span class="pill-dot" aria-hidden="true"></span>
+        <span id="pill-text">connecting&hellip;</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <p class="flash" id="flash" role="alert" hidden></p>
+
+      <section class="card" aria-labelledby="setup-title">
+        <h2 id="setup-title">Setup</h2>
+        <div class="fields">
+          <div class="field">
+            <label for="source">Input device</label>
+            <select id="source"></select>
+          </div>
+          <div class="field">
+            <label for="channel">Channel</label>
+            <select id="channel"></select>
+          </div>
+          <div class="field">
+            <label for="output">Output device</label>
+            <select id="output"></select>
+          </div>
+          <div class="field">
+            <label for="latency">Latency (frames/rate)</label>
+            <input id="latency" type="text" inputmode="numeric" value="128/48000" spellcheck="false" />
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" id="save-config">Save</button>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="rig-title">
+        <h2 id="rig-title">Rig</h2>
+        <div class="actions">
+          <button type="button" id="connect-direct">Direct</button>
+          <button type="button" id="connect-amp">Amp</button>
+          <button type="button" id="disconnect" class="ghost">Disconnect</button>
+        </div>
+
+        <div class="field">
+          <label for="volume">Volume <output id="volume-value" for="volume">100%</output></label>
+          <input id="volume" type="range" min="0" max="150" step="1" value="100" />
+        </div>
+
+        <div class="field">
+          <label for="tone">Tone</label>
+          <div class="row">
+            <select id="tone"></select>
+            <button type="button" id="load-tone">Load tone</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="meter-seconds">Level meter</label>
+          <div class="row">
+            <input id="meter-seconds" type="number" min="1" max="60" step="1" value="10" />
+            <button type="button" id="measure">Measure</button>
+          </div>
+          <p class="meter-result" id="meter-result" hidden>
+            <span class="meter-peak" id="meter-peak"></span>
+            <span class="meter-advice" id="meter-advice"></span>
+          </p>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="status-title">
+        <h2 id="status-title">Status</h2>
+        <dl class="details" id="details"></dl>
+      </section>
+    </main>
+  </body>
+</html>

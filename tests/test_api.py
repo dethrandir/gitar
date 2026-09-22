@@ -90,6 +90,42 @@ def test_devices_rejects_unknown_kind(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_ports_source_strips_device_prefix(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        devices,
+        "capture_ports",
+        lambda device: [f"{device}:capture_AUX0", f"{device}:capture_AUX1"],
+    )
+    response = client.get("/api/ports?device=in1")
+    assert response.status_code == 200
+    assert response.json() == {"ports": ["capture_AUX0", "capture_AUX1"]}
+
+
+def test_ports_sink_uses_playback_ports(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        devices,
+        "playback_ports",
+        lambda device: [f"{device}:playback_FL", f"{device}:playback_FR"],
+    )
+    response = client.get("/api/ports?device=out1&kind=sink")
+    assert response.status_code == 200
+    assert response.json() == {"ports": ["playback_FL", "playback_FR"]}
+
+
+def test_ports_requires_device(client: TestClient) -> None:
+    response = client.get("/api/ports")
+    assert response.status_code == 422
+
+
+def test_ports_rejects_unknown_kind(client: TestClient) -> None:
+    response = client.get("/api/ports?device=in1&kind=bogus")
+    assert response.status_code == 422
+
+
 def test_connect_direct_updates_status(client: TestClient) -> None:
     response = client.post("/api/connect", json={"mode": "direct"})
     assert response.status_code == 200
@@ -190,3 +226,9 @@ def test_create_app_without_web_assets(tmp_path: Path, monkeypatch: pytest.Monke
     app = create_app(NullBackend())
     with TestClient(app) as test_client:
         assert test_client.get("/api/health").status_code == 200
+
+
+def test_root_serves_packaged_web_ui(client: TestClient) -> None:
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
