@@ -80,6 +80,11 @@ endif()
 file(GLOB GITAR_ENGINE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 
+# main.cpp defines the executable entry point, so it must not be part of the
+# static library (the test binary supplies its own main).
+list(REMOVE_ITEM GITAR_ENGINE_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+
 add_library(gitar_engine STATIC ${GITAR_ENGINE_SOURCES})
 target_include_directories(gitar_engine PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
@@ -87,6 +92,10 @@ target_include_directories(gitar_engine PUBLIC
 target_link_libraries(gitar_engine PUBLIC gitar_miniaudio ${GITAR_AUDIO_BACKEND_LIBS})
 target_link_libraries(gitar_engine PRIVATE gitar_json Threads::Threads)
 gitar_set_warnings(gitar_engine)
+
+add_executable(gitar-engine src/main.cpp)
+target_link_libraries(gitar-engine PRIVATE gitar_engine)
+gitar_set_warnings(gitar-engine)
 
 if(GITAR_BUILD_TESTS)
     enable_testing()
