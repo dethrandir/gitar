@@ -99,16 +99,17 @@ gitar/
 - [ ] M4.4 Preset save/load/share
 
 ### M5 — Windows
-- [ ] M5.1 WASAPI shared/exclusive device enumeration + selection
-- [ ] M5.2 PowerShell installer/uninstaller, PATH + start menu
-- [ ] M5.3 Windows CI build + release artifact
-- [ ] M5.4 Manual test checklist on Windows
+- [x] M5.1 WASAPI device enumeration + selection (via miniaudio; engine builds on Windows)
+- [x] M5.2 PowerShell installer/uninstaller with PATH handling
+- [x] M5.3 Windows CI build + release artifact
+- [x] M5.4 Manual test checklist ([`docs/windows-testing.md`](docs/windows-testing.md)) — run on real hardware still pending
+- [ ] M5.5 Verify on a real Windows machine and fix fallout
 
 ### M6 — Packaging & release
-- [ ] M6.1 Build native binaries (Linux + Windows) and attach to releases
-- [ ] M6.2 `pip install gitar` wheel publishing workflow
+- [x] M6.1 Build native binaries (Linux + Windows) and attach to releases
+- [ ] M6.2 Publish the wheel to PyPI (currently only attached to releases)
 - [ ] M6.3 Versioning + changelog automation
-- [ ] M6.4 One-line installers download matching engine binary
+- [ ] M6.4 Linux one-liner installer downloads the matching engine binary
 
 ## Open questions / decisions log
 
