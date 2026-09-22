@@ -4,14 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
 
 from gitar_server import __version__, devices
 from gitar_server.api import create_app
+from gitar_server.api import engine as engine_module
 from gitar_server.backends import LevelReading, NullBackend
 from gitar_server.config import Config
+from gitar_server.engine_client import EngineError
+from gitar_server.engine_controller import EngineController
+from gitar_server.models import ModelInfo
 
 TONES = ["army", "clean", "crunch"]
 
@@ -232,3 +237,218 @@ def test_root_serves_packaged_web_ui(client: TestClient) -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
+
+
+class _FakeEngine:
+    def __init__(self) -> None:
+        self.available = True
+        self.error: Exception | None = None
+        self.calls: list[tuple[str, object]] = []
+        self.status_payload: dict[str, object] = {"running": True, "gain": 1.0}
+        self.shutdown_calls = 0
+
+    def _result(self) -> dict[str, object]:
+        if self.error is not None:
+            raise self.error
+        return dict(self.status_payload)
+
+    def is_available(self) -> bool:
+        return self.available
+
+    def status(self) -> dict[str, object]:
+        self.calls.append(("status", None))
+        return self._result()
+
+    def start(self, **params: object) -> dict[str, object]:
+        self.calls.append(("start", params))
+        return self._result()
+
+    def stop(self) -> dict[str, object]:
+        self.calls.append(("stop", None))
+        return self._result()
+
+    def load_model(self, path: str) -> dict[str, object]:
+        self.calls.append(("load_model", path))
+        return self._result()
+
+    def clear_model(self) -> dict[str, object]:
+        self.calls.append(("clear_model", None))
+        return self._result()
+
+    def set_gain(self, gain: float) -> dict[str, object]:
+        self.calls.append(("set_gain", gain))
+        return self._result()
+
+    def set_gate(
+        self, *, enabled: bool | None = None, threshold_db: float | None = None
+    ) -> dict[str, object]:
+        self.calls.append(("set_gate", (enabled, threshold_db)))
+        return self._result()
+
+    def shutdown(self) -> None:
+        self.shutdown_calls += 1
+
+
+@pytest.fixture()
+def engine_app(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[tuple[TestClient, _FakeEngine]]:
+    monkeypatch.setenv("GITAR_CONFIG_DIR", str(tmp_path))
+    fake = _FakeEngine()
+    app = create_app(NullBackend(), engine=cast(EngineController, fake))
+    with TestClient(app) as test_client:
+        yield test_client, fake
+
+
+def test_models_lists_scanned_models(
+    engine_app: tuple[TestClient, _FakeEngine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _ = engine_app
+    model = ModelInfo(
+        name="amp",
+        path=Path("/models/amp.nam"),
+        architecture="WaveNet",
+        sample_rate=48000.0,
+        size_bytes=1234,
+    )
+    monkeypatch.setattr(engine_module, "scan_models", lambda directory=None: [model])
+
+    response = client.get("/api/models")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "models": [
+            {
+                "name": "amp",
+                "path": "/models/amp.nam",
+                "architecture": "WaveNet",
+                "sample_rate": 48000.0,
+                "size_bytes": 1234,
+            }
+        ]
+    }
+
+
+def test_engine_status_returns_status(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.get("/api/engine/status")
+
+    assert response.status_code == 200
+    assert response.json() == {"running": True, "gain": 1.0}
+    assert fake.calls[-1] == ("status", None)
+
+
+def test_engine_status_unavailable_is_503(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+    fake.available = False
+
+    response = client.get("/api/engine/status")
+
+    assert response.status_code == 503
+
+
+def test_engine_start_forwards_params(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/start", json={"input_device": "guitar", "gain": 0.5})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("start", {"input_device": "guitar", "gain": 0.5})
+
+
+def test_engine_start_with_empty_body(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/start", json={})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("start", {})
+
+
+def test_engine_stop(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/stop")
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("stop", None)
+
+
+def test_engine_model_loads_path(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/model", json={"path": "/models/amp.nam"})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("load_model", "/models/amp.nam")
+
+
+def test_engine_model_empty_path_clears(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/model", json={"path": ""})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("clear_model", None)
+
+
+def test_engine_gain(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/gain", json={"gain": 0.75})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("set_gain", 0.75)
+
+
+def test_engine_gate_requires_a_field(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, _ = engine_app
+
+    response = client.post("/api/engine/gate", json={})
+
+    assert response.status_code == 422
+
+
+def test_engine_gate_forwards_fields(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/gate", json={"enabled": True, "threshold_db": -30.0})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("set_gate", (True, -30.0))
+
+
+def test_engine_error_maps_to_conflict(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+    fake.error = EngineError(-32000, "boom")
+
+    response = client.post("/api/engine/gain", json={"gain": 0.5})
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "engine error -32000: boom"
+
+
+def test_engine_error_maps_to_503_when_binary_missing(
+    engine_app: tuple[TestClient, _FakeEngine],
+) -> None:
+    client, fake = engine_app
+    fake.available = False
+    fake.error = EngineError(-32000, "gitar-engine binary not found")
+
+    response = client.post("/api/engine/gain", json={"gain": 0.5})
+
+    assert response.status_code == 503
+
+
+def test_engine_shutdown_called_on_app_close(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("GITAR_CONFIG_DIR", str(tmp_path))
+    fake = _FakeEngine()
+    app = create_app(NullBackend(), engine=cast(EngineController, fake))
+
+    with TestClient(app):
+        pass
+
+    assert fake.shutdown_calls == 1

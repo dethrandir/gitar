@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,6 +25,10 @@ from gitar_server.backends import (
     get_backend,
 )
 from gitar_server.config import Config, ConfigError, load_config, save_config
+from gitar_server.engine_client import EngineError
+from gitar_server.engine_controller import EngineController
+
+from .engine import router as engine_router
 
 _PACKAGED_WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 _DEFAULT_WS_INTERVAL = 1.0
@@ -77,14 +83,38 @@ def _ws_interval() -> float:
     return interval if interval > 0 else _DEFAULT_WS_INTERVAL
 
 
-def create_app(backend: AudioBackend | None = None, *, web_dir: Path | None = None) -> FastAPI:
+def _engine_http_status(request: Request) -> int:
+    engine = getattr(request.app.state, "engine", None)
+    if engine is not None and not engine.is_available():
+        return 503
+    return 409
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    yield
+    controller = getattr(app.state, "engine", None)
+    if controller is not None:
+        controller.shutdown()
+
+
+def create_app(
+    backend: AudioBackend | None = None,
+    *,
+    web_dir: Path | None = None,
+    engine: EngineController | None = None,
+) -> FastAPI:
     """Build the control API application.
 
     ``backend`` defaults to the platform backend; ``web_dir`` defaults to the
-    packaged ``web`` directory when present. Missing web assets are tolerated.
+    packaged ``web`` directory when present. ``engine`` defaults to a lazily
+    created controller; it is shut down with the application. Missing web assets
+    are tolerated.
     """
-    app = FastAPI(title="gitar", version=__version__)
+    app = FastAPI(title="gitar", version=__version__, lifespan=_lifespan)
     audio = backend if backend is not None else get_backend()
+    if engine is not None:
+        app.state.engine = engine
 
     @app.exception_handler(BackendError)
     async def _handle_backend_error(_: Request, exc: BackendError) -> JSONResponse:
@@ -93,6 +123,14 @@ def create_app(backend: AudioBackend | None = None, *, web_dir: Path | None = No
     @app.exception_handler(ConfigError)
     async def _handle_config_error(_: Request, exc: ConfigError) -> JSONResponse:
         return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+    @app.exception_handler(EngineError)
+    async def _handle_engine_error(request: Request, exc: EngineError) -> JSONResponse:
+        return JSONResponse(status_code=_engine_http_status(request), content={"detail": str(exc)})
+
+    @app.exception_handler(RuntimeError)
+    async def _handle_engine_runtime_error(request: Request, exc: RuntimeError) -> JSONResponse:
+        return JSONResponse(status_code=_engine_http_status(request), content={"detail": str(exc)})
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
@@ -189,6 +227,7 @@ def create_app(backend: AudioBackend | None = None, *, web_dir: Path | None = No
             return
 
     static_root = web_dir if web_dir is not None else _PACKAGED_WEB_DIR
+    app.include_router(engine_router)
     if static_root.is_dir():
         app.mount("/", StaticFiles(directory=str(static_root), html=True), name="web")
 
