@@ -43,6 +43,8 @@ Options:
 
 Environment:
   GITAR_BIN_DIR     Default directory for the engine binary
+  GITAR_DATA_DIR    Where the control server venv lives
+                    (default: ~/.local/share/gitar)
 EOF
 }
 
@@ -170,7 +172,7 @@ fi
 if [ "$NEED_PYTHON" -eq 1 ]; then
     if ! var python3; then
         warn "python3 was not found; skipping the Python control server."
-        warn "Install Python 3.10+ and run: python3 -m pip install --user <wheel-url>"
+        warn "Install Python 3.10+, then re-run this installer."
     else
         if [ ! -f "$RELEASE_JSON" ]; then
             download "$API/releases/tags/$TAG" "$RELEASE_JSON" || true
@@ -182,12 +184,26 @@ if [ "$NEED_PYTHON" -eq 1 ]; then
         if [ -z "$WHEEL" ]; then
             warn "Release $TAG has no wheel asset; skipping the Python control server."
         else
-            step "Installing the control server (pip --user)"
-            if python3 -m pip install --user "$WHEEL"; then
-                ok "Installed the gitar control server (gitard)."
+            # A dedicated venv works everywhere, including PEP 668
+            # (externally-managed) Pythons where `pip install --user` is refused.
+            DATA_DIR="${GITAR_DATA_DIR:-$HOME/.local/share/gitar}"
+            VENV="$DATA_DIR/venv"
+            step "Installing the control server (venv at $VENV)"
+            if python3 -m venv "$VENV" \
+                && "$VENV/bin/python" -m pip install -q --upgrade pip \
+                && "$VENV/bin/python" -m pip install "$WHEEL"; then
+                mkdir -p "$BIN_DIR"
+                cat >"$BIN_DIR/gitard" <<SHIM
+#!/bin/sh
+exec "$VENV/bin/gitard" "\$@"
+SHIM
+                chmod 755 "$BIN_DIR/gitard"
+                ok "Installed $BIN_DIR/gitard"
             else
-                warn "pip install failed; run it manually:"
-                warn "  python3 -m pip install --user $WHEEL"
+                warn "Could not install the control server automatically."
+                warn "Create a venv and install the wheel yourself:"
+                warn "  python3 -m venv $VENV"
+                warn "  $VENV/bin/pip install $WHEEL"
             fi
         fi
     fi
