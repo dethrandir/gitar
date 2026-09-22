@@ -12,6 +12,21 @@ std::filesystem::path fixture(const char* name) {
     return std::filesystem::path(GITAR_TEST_FIXTURES_DIR) / name;
 }
 
+bool device_test_enabled() {
+#ifdef _WIN32
+    char* value = nullptr;
+    std::size_t length = 0;
+    if (_dupenv_s(&value, &length, "GITAR_ENGINE_DEVICE_TEST") != 0) {
+        return false;
+    }
+    const bool enabled = value != nullptr;
+    std::free(value);
+    return enabled;
+#else
+    return std::getenv("GITAR_ENGINE_DEVICE_TEST") != nullptr;
+#endif
+}
+
 }  // namespace
 
 TEST_CASE("a fresh engine is stopped with zero counters") {
@@ -45,7 +60,7 @@ TEST_CASE("start fails cleanly for an unknown device") {
 }
 
 TEST_CASE("engine starts and stops with the default devices when enabled") {
-    if (std::getenv("GITAR_ENGINE_DEVICE_TEST") == nullptr) {
+    if (!device_test_enabled()) {
         return;
     }
     gitar::Engine engine;

@@ -10,6 +10,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(GITAR_BUILD_TESTS "Build the gitar engine tests" ON)
 option(GITAR_WERROR "Treat warnings as errors in gitar code" ON)
 
+if(WIN32)
+    # miniaudio pulls in windows.h, whose min/max macros break std::min/std::max
+    # and whose bloat we do not need.
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
 # Pinned headers/sources for the neural amp modeler. Both projects are populated
 # but their own CMake is never added: SOURCE_SUBDIR points at a directory that
 # does not exist, so add_subdirectory() is skipped. Only headers (Eigen) and
@@ -147,6 +153,10 @@ target_link_libraries(gitar_engine PUBLIC gitar_miniaudio ${GITAR_AUDIO_BACKEND_
 # loading fails with "No config parser registered". WHOLE_ARCHIVE keeps them.
 target_link_libraries(gitar_engine PRIVATE gitar_json Threads::Threads
     "$<LINK_LIBRARY:WHOLE_ARCHIVE,gitar_nam>")
+if(WIN32)
+    # The control server uses WinSock.
+    target_link_libraries(gitar_engine PRIVATE ws2_32)
+endif()
 gitar_set_warnings(gitar_engine)
 
 add_executable(gitar-engine src/main.cpp)
