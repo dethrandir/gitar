@@ -98,8 +98,8 @@ gitar/
 - [x] M4.3 Preset save/load/delete/apply
 - [ ] M4.4 Knob/fader components and layout polish
 - [x] M4.5 Chromatic tuner (engine pitch detection + UI)
-- [ ] M4.6 Spectrum analyzer
-- [ ] M4.7 Recording + metronome
+- [x] M4.6 Spectrum analyzer (engine FFT + UI)
+- [x] M4.7 Recording + metronome
 
 ### M5 — Windows
 - [x] M5.1 WASAPI device enumeration + selection (via miniaudio; engine builds on Windows)

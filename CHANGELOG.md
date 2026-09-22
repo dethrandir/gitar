@@ -22,8 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   discovery, a PipeWire/Guitarix backend, a Windows WASAPI placeholder, and
   engine process control.
 - **Local web UI**: setup wizard, direct/amp routing, volume, tone loading,
-  level meter, and a neural-amp engine panel with a model browser.
+  level meter, and a neural-amp engine panel with a model browser, three-band
+  EQ, cabinet IR, presets, tuner, and spectrum analyzer.
+- **Practice tools** in the engine: recording to WAV and a metronome.
 - **Model registry**: `.nam` scanning with metadata.
+- **Rig presets**: save/load/delete/apply a full rig (model, cab, gain, gate, EQ).
+- **Packaging**: tag-triggered release workflow (engine binaries for Linux and
+  Windows, Python wheel), PyPI trusted publishing, PowerShell and Linux v2
+  installers, and a version-sync guard + bump script.
 - English project documentation: README, architecture, troubleshooting,
   contributing, and this changelog.
 - Repository hygiene: `.gitignore`, `.editorconfig`, `.gitattributes`,
