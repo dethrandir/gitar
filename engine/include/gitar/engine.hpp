@@ -1,0 +1,49 @@
+#pragma once
+
+#include <cstdint>
+#include <memory>
+#include <string>
+
+namespace gitar {
+
+struct EngineConfig {
+    std::string input_device;   // empty = system default capture
+    std::string output_device;  // empty = system default playback
+    std::uint32_t sample_rate = 48000;
+    std::uint32_t period_frames = 128;
+    std::uint32_t channels = 2;
+    float gain = 1.0f;
+};
+
+// Owns a capture device and a playback device connected by a lock-free bridge.
+// start() on an already running engine stops the current devices first, then
+// starts the requested configuration (restart semantics).
+class Engine {
+   public:
+    Engine();
+    ~Engine();
+    Engine(const Engine&) = delete;
+    Engine& operator=(const Engine&) = delete;
+
+    bool start(const EngineConfig& config, std::string* error = nullptr);
+    void stop();
+    bool running() const;
+
+    void set_gain(float gain);
+    float gain() const;
+
+    float input_peak_db() const;
+    float output_peak_db() const;
+
+    double latency_ms() const;
+    std::uint32_t sample_rate() const;
+    std::uint32_t period_frames() const;
+    std::uint64_t overrun_frames() const;
+    std::uint64_t underrun_frames() const;
+
+   private:
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
+}  // namespace gitar
