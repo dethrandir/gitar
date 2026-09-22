@@ -567,3 +567,111 @@ def test_engine_shutdown_called_on_app_close(
         pass
 
     assert fake.shutdown_calls == 1
+
+
+PRESET_BODY = {
+    "name": "clean",
+    "model_path": "/models/amp.nam",
+    "cab_ir_path": "/cabs/marshal.wav",
+    "gain": 0.7,
+    "gate_enabled": False,
+    "gate_threshold_db": -40.0,
+    "eq_low_db": 2.0,
+    "eq_mid_db": -1.0,
+    "eq_high_db": 3.0,
+}
+
+
+def test_presets_list_starts_empty(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, _ = engine_app
+
+    response = client.get("/api/presets")
+
+    assert response.status_code == 200
+    assert response.json() == {"presets": []}
+
+
+def test_presets_save_get_list_delete(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, _ = engine_app
+
+    saved = client.post("/api/presets", json=PRESET_BODY)
+    assert saved.status_code == 200
+    assert saved.json() == PRESET_BODY
+
+    assert client.get("/api/presets").json() == {"presets": ["clean"]}
+    assert client.get("/api/presets/clean").json() == PRESET_BODY
+
+    deleted = client.delete("/api/presets/clean")
+    assert deleted.status_code == 200
+    assert deleted.json() == {"deleted": True}
+    assert client.get("/api/presets").json() == {"presets": []}
+
+
+def test_presets_delete_missing_returns_false(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, _ = engine_app
+
+    response = client.delete("/api/presets/nope")
+
+    assert response.status_code == 200
+    assert response.json() == {"deleted": False}
+
+
+def test_presets_apply_forwards_to_engine(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+    client.post("/api/presets", json=PRESET_BODY)
+    fake.calls.clear()
+
+    response = client.post("/api/presets/clean/apply")
+
+    assert response.status_code == 200
+    assert response.json() == {"running": True, "gain": 1.0}
+    assert fake.calls == [
+        ("load_model", "/models/amp.nam"),
+        ("load_cab", "/cabs/marshal.wav"),
+        ("set_gain", 0.7),
+        ("set_gate", (False, -40.0)),
+        ("set_eq", (2.0, -1.0, 3.0)),
+        ("status", None),
+    ]
+
+
+def test_presets_apply_missing_is_404(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, _ = engine_app
+
+    response = client.post("/api/presets/nope/apply")
+
+    assert response.status_code == 404
+
+
+def test_presets_apply_unavailable_is_503(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+    client.post("/api/presets", json=PRESET_BODY)
+    fake.available = False
+
+    response = client.post("/api/presets/clean/apply")
+
+    assert response.status_code == 503
+
+
+def test_presets_get_missing_is_404(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, _ = engine_app
+
+    response = client.get("/api/presets/nope")
+
+    assert response.status_code == 404
+
+
+def test_presets_save_unsafe_name_is_400(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, _ = engine_app
+
+    response = client.post("/api/presets", json=PRESET_BODY | {"name": "../escape"})
+
+    assert response.status_code == 400
+
+
+def test_presets_get_unsafe_name_is_400(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, _ = engine_app
+
+    response = client.get("/api/presets/a%5Cb")
+
+    assert response.status_code == 400

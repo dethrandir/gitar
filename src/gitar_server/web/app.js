@@ -46,6 +46,10 @@
     engineCab: document.getElementById("engine-cab"),
     engineLoadCab: document.getElementById("engine-load-cab"),
     engineClearCab: document.getElementById("engine-clear-cab"),
+    enginePreset: document.getElementById("engine-preset"),
+    engineLoadPreset: document.getElementById("engine-load-preset"),
+    engineSavePreset: document.getElementById("engine-save-preset"),
+    engineDeletePreset: document.getElementById("engine-delete-preset"),
     engineInputBar: document.getElementById("engine-input-bar"),
     engineOutputBar: document.getElementById("engine-output-bar"),
     engineInputPeak: document.getElementById("engine-input-peak"),
@@ -365,6 +369,10 @@
     elements.engineCab.disabled = !available;
     elements.engineLoadCab.disabled = !available;
     elements.engineClearCab.disabled = !available;
+    elements.enginePreset.disabled = !available;
+    elements.engineLoadPreset.disabled = !available;
+    elements.engineSavePreset.disabled = !available;
+    elements.engineDeletePreset.disabled = !available;
     elements.engineHint.hidden = available;
   }
 
@@ -645,6 +653,80 @@
     }
   }
 
+  async function loadPresets() {
+    try {
+      const body = await api("/api/presets");
+      fillTextSelect(elements.enginePreset, body.presets, "— select preset —");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  function presetFromStatus(name, status) {
+    return {
+      name,
+      model_path: typeof status.model_path === "string" ? status.model_path : "",
+      cab_ir_path: typeof status.cab_ir_path === "string" ? status.cab_ir_path : "",
+      gain: typeof status.gain === "number" ? status.gain : 1.0,
+      gate_enabled: Boolean(status.gate_enabled),
+      gate_threshold_db:
+        typeof status.gate_threshold_db === "number" ? status.gate_threshold_db : -60.0,
+      eq_low_db: typeof status.eq_low_db === "number" ? status.eq_low_db : 0.0,
+      eq_mid_db: typeof status.eq_mid_db === "number" ? status.eq_mid_db : 0.0,
+      eq_high_db: typeof status.eq_high_db === "number" ? status.eq_high_db : 0.0,
+    };
+  }
+
+  async function loadPreset() {
+    const name = elements.enginePreset.value;
+    if (!name) {
+      flash("Select a preset first.", "error");
+      return;
+    }
+    try {
+      const status = await api(`/api/presets/${encodeURIComponent(name)}/apply`, {
+        method: "POST",
+      });
+      renderEngineStatus(status);
+      flash(`Loaded preset "${name}".`, "info");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function savePreset() {
+    const name = window.prompt("Preset name:");
+    if (!name || !name.trim()) return;
+    try {
+      const status = await api("/api/engine/status");
+      const saved = await api("/api/presets", {
+        method: "POST",
+        body: presetFromStatus(name.trim(), status),
+      });
+      await loadPresets();
+      setSelectValue(elements.enginePreset, saved.name);
+      flash(`Saved preset "${saved.name}".`, "info");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function deletePreset() {
+    const name = elements.enginePreset.value;
+    if (!name) {
+      flash("Select a preset first.", "error");
+      return;
+    }
+    if (!window.confirm(`Delete preset "${name}"?`)) return;
+    try {
+      await api(`/api/presets/${encodeURIComponent(name)}`, { method: "DELETE" });
+      await loadPresets();
+      flash(`Deleted preset "${name}".`, "info");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
   function connectWs() {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     socket = new WebSocket(`${protocol}://${window.location.host}/api/ws`);
@@ -738,6 +820,9 @@
 
     elements.engineLoadCab.addEventListener("click", loadEngineCab);
     elements.engineClearCab.addEventListener("click", clearEngineCab);
+    elements.engineLoadPreset.addEventListener("click", loadPreset);
+    elements.engineSavePreset.addEventListener("click", savePreset);
+    elements.engineDeletePreset.addEventListener("click", deletePreset);
 
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
@@ -766,6 +851,7 @@
     await loadEngineDevices();
     await loadModels();
     await loadCabs();
+    await loadPresets();
     await refreshStatus();
   }
 

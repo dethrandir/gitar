@@ -29,6 +29,7 @@ from gitar_server.engine_client import EngineError
 from gitar_server.engine_controller import EngineController
 
 from .engine import router as engine_router
+from .presets import router as presets_router
 
 _PACKAGED_WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 _DEFAULT_WS_INTERVAL = 1.0
@@ -228,6 +229,7 @@ def create_app(
 
     static_root = web_dir if web_dir is not None else _PACKAGED_WEB_DIR
     app.include_router(engine_router)
+    app.include_router(presets_router)
     if static_root.is_dir():
         app.mount("/", StaticFiles(directory=str(static_root), html=True), name="web")
 
