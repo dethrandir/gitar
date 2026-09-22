@@ -514,6 +514,18 @@ void ControlServer::Impl::handle_client(socket_t client_socket) {
     std::string buffer;
     char chunk[4096];
     while (running.load()) {
+        // Poll with a timeout: shutdown() does not reliably wake a blocked
+        // recv() on Windows, so never block indefinitely here.
+        fd_set read_set;
+        FD_ZERO(&read_set);
+        FD_SET(client_socket, &read_set);
+        timeval timeout{};
+        timeout.tv_usec = 100000;  // 100 ms
+        if (::select(static_cast<int>(client_socket) + 1, &read_set, nullptr, nullptr, &timeout) <=
+            0) {
+            continue;
+        }
+
         const auto received = ::recv(client_socket, chunk, static_cast<int>(sizeof(chunk)), 0);
         if (received <= 0) {
             break;
