@@ -37,7 +37,7 @@ This document describes how `gitar` is built. It is a living document; see
 
 ### Native engine (`engine/`)
 
-- C++17, built with CMake.
+- C++20, built with CMake.
 - [`miniaudio`](https://miniaud.io/) for cross-platform device I/O: WASAPI on
   Windows, ALSA / PulseAudio / JACK on Linux. A single header, no external
   dependencies.

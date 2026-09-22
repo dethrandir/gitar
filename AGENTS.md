@@ -8,7 +8,7 @@ Guidance for automated agents working in this repository.
 run it through neural amp models. Historically Linux-only (bash + PipeWire +
 Guitarix); now being rebuilt as a cross-platform app:
 
-- `engine/` — native C++17 real-time audio engine (`gitar-engine`).
+- `engine/` — native C++20 real-time audio engine (`gitar-engine`).
 - `src/gitar_server/` — Python control server (FastAPI) + `gitard` CLI. **Never**
   in the audio path.
 - `web/` — static local web UI served by the control server.
@@ -21,7 +21,7 @@ Guitarix); now being rebuilt as a cross-platform app:
 - Comments only for non-obvious *why*. Do not narrate *what* the code does.
 - Bash: `set -u`/`set -eu`, quote variables, `shellcheck`-clean.
 - Python: type-annotated, `ruff` + `mypy --strict` clean, `src/` layout.
-- C++: C++17, `clang-format` clean.
+- C++: C++20, `clang-format` clean.
 
 ## Setup
 
