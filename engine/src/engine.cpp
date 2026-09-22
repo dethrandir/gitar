@@ -6,9 +6,12 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "gitar/bridge.hpp"
 #include "gitar/level_meter.hpp"
+#include "gitar/neural_model.hpp"
+#include "gitar/noise_gate.hpp"
 #include "gitar/processor.hpp"
 #include "miniaudio.h"
 
@@ -47,9 +50,19 @@ struct Engine::Impl {
     std::unique_ptr<InterleavedBridge> bridge;
     std::unique_ptr<GainProcessor> processor;
     std::unique_ptr<LevelMeter> input_meter;
+    std::unique_ptr<NoiseGate> gate;
+
+    // The control thread swaps this while the playback callback reads it, so the
+    // callback never observes a half-built model. shared_ptr keeps the old model
+    // alive until the callback that loaded it has finished.
+    std::atomic<std::shared_ptr<NeuralModel>> model;
+    std::string model_path;
+    std::vector<float> mono_scratch;
 
     std::atomic<bool> running{false};
     std::atomic<float> requested_gain{1.0f};
+    std::atomic<bool> requested_gate_enabled{true};
+    std::atomic<float> requested_gate_threshold_db{-60.0f};
     std::uint32_t actual_sample_rate = 48000;
     std::uint32_t actual_period_frames = 0;
 
@@ -88,6 +101,34 @@ void Engine::Impl::playback_callback(ma_device* device, void* output, const void
     }
     auto* samples = static_cast<float*>(output);
     self->bridge->read(samples, frame_count);
+
+    NoiseGate* const gate = self->gate.get();
+    const std::shared_ptr<NeuralModel> model = self->model.load(std::memory_order_acquire);
+    if ((gate != nullptr && gate->enabled()) || model != nullptr) {
+        const std::uint32_t channels = self->config.channels;
+        const std::size_t capacity = self->mono_scratch.size();
+        std::size_t offset = 0;
+        while (offset < frame_count && capacity > 0) {
+            const std::size_t chunk = std::min<std::size_t>(capacity, frame_count - offset);
+            float* const mono = self->mono_scratch.data();
+            for (std::size_t i = 0; i < chunk; ++i) {
+                mono[i] = samples[(offset + i) * channels];
+            }
+            if (gate != nullptr) {
+                gate->process(mono, chunk);
+            }
+            if (model != nullptr) {
+                model->process(mono, mono, static_cast<int>(chunk));
+            }
+            for (std::size_t i = 0; i < chunk; ++i) {
+                for (std::uint32_t channel = 0; channel < channels; ++channel) {
+                    samples[(offset + i) * channels + channel] = mono[i];
+                }
+            }
+            offset += chunk;
+        }
+    }
+
     if (self->processor != nullptr) {
         self->processor->process(samples, frame_count);
     }
@@ -135,6 +176,22 @@ bool Engine::Impl::start(const EngineConfig& requested, std::string* error) {
         config.period_frames = 128;
     }
 
+    if (config.model_path.empty()) {
+        model.store(std::shared_ptr<NeuralModel>{}, std::memory_order_release);
+        model_path.clear();
+    } else {
+        auto loaded = std::make_shared<NeuralModel>();
+        std::string model_error;
+        if (!loaded->load(config.model_path, &model_error)) {
+            set_error(error, model_error.empty() ? "failed to load model: " + config.model_path
+                                                 : model_error);
+            release();
+            return false;
+        }
+        model.store(std::move(loaded), std::memory_order_release);
+        model_path = config.model_path;
+    }
+
     if (ma_context_init(nullptr, 0, nullptr, &context) != MA_SUCCESS) {
         set_error(error, "failed to initialize the audio context");
         release();
@@ -146,6 +203,12 @@ bool Engine::Impl::start(const EngineConfig& requested, std::string* error) {
     processor = std::make_unique<GainProcessor>(config.sample_rate, config.channels);
     processor->set_gain(config.gain);
     input_meter = std::make_unique<LevelMeter>(static_cast<float>(config.sample_rate));
+    gate = std::make_unique<NoiseGate>(static_cast<float>(config.sample_rate),
+                                       config.gate_threshold_db);
+    gate->set_enabled(config.gate_enabled);
+    requested_gate_enabled.store(config.gate_enabled, std::memory_order_relaxed);
+    requested_gate_threshold_db.store(gate->threshold_db(), std::memory_order_relaxed);
+    mono_scratch.assign(config.period_frames, 0.0f);
 
     const ma_device_id* input_id = nullptr;
     if (!resolve_device_id(ma_device_type_capture, config.input_device, &input_id)) {
@@ -228,6 +291,8 @@ void Engine::Impl::release() {
     bridge.reset();
     processor.reset();
     input_meter.reset();
+    gate.reset();
+    mono_scratch.clear();
     running.store(false, std::memory_order_relaxed);
     actual_period_frames = 0;
 }
@@ -267,6 +332,67 @@ float Engine::gain() const {
         return impl_->processor->gain();
     }
     return impl_->requested_gain.load(std::memory_order_relaxed);
+}
+
+bool Engine::load_model(const std::string& path, std::string* error) {
+    if (error != nullptr) {
+        error->clear();
+    }
+    if (path.empty()) {
+        impl_->model.store(std::shared_ptr<NeuralModel>{}, std::memory_order_release);
+        impl_->model_path.clear();
+        return true;
+    }
+
+    auto loaded = std::make_shared<NeuralModel>();
+    std::string model_error;
+    if (!loaded->load(path, &model_error)) {
+        if (error != nullptr) {
+            *error = model_error.empty() ? "failed to load model: " + path : model_error;
+        }
+        return false;
+    }
+    impl_->model.store(std::move(loaded), std::memory_order_release);
+    impl_->model_path = path;
+    return true;
+}
+
+bool Engine::model_loaded() const {
+    const std::shared_ptr<NeuralModel> model = impl_->model.load(std::memory_order_acquire);
+    return model != nullptr;
+}
+
+std::string Engine::model_path() const {
+    return impl_->model_path;
+}
+
+void Engine::set_gate_enabled(bool enabled) {
+    impl_->requested_gate_enabled.store(enabled, std::memory_order_relaxed);
+    if (impl_->gate != nullptr) {
+        impl_->gate->set_enabled(enabled);
+    }
+}
+
+bool Engine::gate_enabled() const {
+    if (impl_->gate != nullptr) {
+        return impl_->gate->enabled();
+    }
+    return impl_->requested_gate_enabled.load(std::memory_order_relaxed);
+}
+
+void Engine::set_gate_threshold_db(float db) {
+    const float clamped = std::clamp(db, -96.0f, 0.0f);
+    impl_->requested_gate_threshold_db.store(clamped, std::memory_order_relaxed);
+    if (impl_->gate != nullptr) {
+        impl_->gate->set_threshold_db(clamped);
+    }
+}
+
+float Engine::gate_threshold_db() const {
+    if (impl_->gate != nullptr) {
+        return impl_->gate->threshold_db();
+    }
+    return impl_->requested_gate_threshold_db.load(std::memory_order_relaxed);
 }
 
 float Engine::input_peak_db() const {

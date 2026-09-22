@@ -117,6 +117,10 @@ json engine_status(Engine& engine) {
         {"period_frames", engine.period_frames()},
         {"overrun_frames", engine.overrun_frames()},
         {"underrun_frames", engine.underrun_frames()},
+        {"model_loaded", engine.model_loaded()},
+        {"model_path", engine.model_path()},
+        {"gate_enabled", engine.gate_enabled()},
+        {"gate_threshold_db", engine.gate_threshold_db()},
     };
 }
 
@@ -162,6 +166,27 @@ bool apply_start_params(const json& params, EngineConfig* config, std::string* e
             return false;
         }
         config->gain = params["gain"].get<float>();
+    }
+    if (params.contains("model_path")) {
+        if (!params["model_path"].is_string()) {
+            set_error(error, "model_path must be a string");
+            return false;
+        }
+        config->model_path = params["model_path"].get<std::string>();
+    }
+    if (params.contains("gate_enabled")) {
+        if (!params["gate_enabled"].is_boolean()) {
+            set_error(error, "gate_enabled must be a boolean");
+            return false;
+        }
+        config->gate_enabled = params["gate_enabled"].get<bool>();
+    }
+    if (params.contains("gate_threshold_db")) {
+        if (!params["gate_threshold_db"].is_number()) {
+            set_error(error, "gate_threshold_db must be a number");
+            return false;
+        }
+        config->gate_threshold_db = params["gate_threshold_db"].get<float>();
     }
     return true;
 }
@@ -264,6 +289,54 @@ std::string ControlServer::Impl::process_line(const std::string& line) {
         std::lock_guard<std::mutex> lock(engine_mutex);
         engine->set_gain(gain);
         return success(id, json{{"gain", engine->gain()}}).dump();
+    }
+    if (method == "load_model") {
+        if (!params.is_object() || !params.contains("path") || !params["path"].is_string()) {
+            return failure(id, -32602, "invalid params: path is required").dump();
+        }
+        const std::string path = params["path"].get<std::string>();
+        std::string load_error;
+        bool loaded = false;
+        {
+            std::lock_guard<std::mutex> lock(engine_mutex);
+            loaded = engine->load_model(path, &load_error);
+        }
+        if (!loaded) {
+            return failure(id, -32000, load_error.empty() ? "failed to load model" : load_error)
+                .dump();
+        }
+        std::lock_guard<std::mutex> lock(engine_mutex);
+        return success(id, engine_status(*engine)).dump();
+    }
+    if (method == "clear_model") {
+        std::lock_guard<std::mutex> lock(engine_mutex);
+        engine->load_model("");
+        return success(id, engine_status(*engine)).dump();
+    }
+    if (method == "set_gate") {
+        if (!params.is_object()) {
+            return failure(id, -32602, "invalid params").dump();
+        }
+        const bool has_enabled = params.contains("enabled");
+        const bool has_threshold = params.contains("threshold_db");
+        if (!has_enabled && !has_threshold) {
+            return failure(id, -32602, "invalid params: enabled or threshold_db is required")
+                .dump();
+        }
+        if (has_enabled && !params["enabled"].is_boolean()) {
+            return failure(id, -32602, "invalid params: enabled must be a boolean").dump();
+        }
+        if (has_threshold && !params["threshold_db"].is_number()) {
+            return failure(id, -32602, "invalid params: threshold_db must be a number").dump();
+        }
+        std::lock_guard<std::mutex> lock(engine_mutex);
+        if (has_enabled) {
+            engine->set_gate_enabled(params["enabled"].get<bool>());
+        }
+        if (has_threshold) {
+            engine->set_gate_threshold_db(params["threshold_db"].get<float>());
+        }
+        return success(id, engine_status(*engine)).dump();
     }
     if (method == "start") {
         if (!params.is_object()) {

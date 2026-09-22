@@ -13,6 +13,9 @@ struct EngineConfig {
     std::uint32_t period_frames = 128;
     std::uint32_t channels = 2;
     float gain = 1.0f;
+    std::string model_path;            // empty = no neural model
+    bool gate_enabled = true;          // noise gate enabled on start
+    float gate_threshold_db = -60.0f;  // noise gate threshold in dBFS
 };
 
 // Owns a capture device and a playback device connected by a lock-free bridge.
@@ -31,6 +34,18 @@ class Engine {
 
     void set_gain(float gain);
     float gain() const;
+
+    // Loads (or clears, with an empty path) the neural model. The swap is
+    // atomic so a running audio callback always sees a complete model. May
+    // allocate; never call from the audio thread.
+    bool load_model(const std::string& path, std::string* error = nullptr);
+    bool model_loaded() const;
+    std::string model_path() const;
+
+    void set_gate_enabled(bool enabled);
+    bool gate_enabled() const;
+    void set_gate_threshold_db(float db);
+    float gate_threshold_db() const;
 
     float input_peak_db() const;
     float output_peak_db() const;

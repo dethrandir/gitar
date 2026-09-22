@@ -4,6 +4,7 @@ add_executable(gitar_engine_tests
     test_level_meter.cpp
     test_bridge.cpp
     test_processor.cpp
+    test_noise_gate.cpp
     test_engine.cpp
     test_control_server.cpp
     test_cli.cpp

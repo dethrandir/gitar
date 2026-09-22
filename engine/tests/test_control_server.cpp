@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <string>
 
 #include "doctest/doctest.h"
@@ -16,6 +17,10 @@
 namespace {
 
 using json = nlohmann::json;
+
+std::string fixture_path(const char* name) {
+    return (std::filesystem::path(GITAR_TEST_FIXTURES_DIR) / name).string();
+}
 
 class LoopbackClient {
    public:
@@ -153,6 +158,58 @@ TEST_CASE("list_devices returns an array without error") {
     const json response = client.exchange(request_with_id(1, "list_devices"));
     CHECK_FALSE(response.contains("error"));
     CHECK(response["result"]["devices"].is_array());
+
+    server.stop();
+}
+
+TEST_CASE("load_model loads a fixture and clear_model resets it") {
+    gitar::Engine engine;
+    gitar::ControlServer server(engine);
+    std::string error;
+    REQUIRE(server.start("127.0.0.1", 0, &error));
+
+    LoopbackClient client(server.port());
+    json response = client.exchange(json{{"jsonrpc", "2.0"},
+                                         {"id", 1},
+                                         {"method", "load_model"},
+                                         {"params", {{"path", fixture_path("identity.nam")}}}});
+    REQUIRE_FALSE(response.contains("error"));
+    CHECK(response["result"]["model_loaded"] == true);
+    CHECK(response["result"]["model_path"] == fixture_path("identity.nam"));
+
+    response = client.exchange(request_with_id(2, "clear_model"));
+    REQUIRE_FALSE(response.contains("error"));
+    CHECK(response["result"]["model_loaded"] == false);
+    CHECK(response["result"]["model_path"] == "");
+
+    server.stop();
+}
+
+TEST_CASE("set_gate updates the status and requires at least one parameter") {
+    gitar::Engine engine;
+    gitar::ControlServer server(engine);
+    std::string error;
+    REQUIRE(server.start("127.0.0.1", 0, &error));
+
+    LoopbackClient client(server.port());
+
+    json response =
+        client.exchange(json{{"jsonrpc", "2.0"},
+                             {"id", 1},
+                             {"method", "set_gate"},
+                             {"params", {{"enabled", false}, {"threshold_db", -40.0}}}});
+    REQUIRE_FALSE(response.contains("error"));
+    CHECK(response["result"]["gate_enabled"] == false);
+    CHECK(response["result"]["gate_threshold_db"] == doctest::Approx(-40.0));
+
+    response = client.exchange(json{
+        {"jsonrpc", "2.0"}, {"id", 2}, {"method", "set_gate"}, {"params", {{"enabled", true}}}});
+    REQUIRE_FALSE(response.contains("error"));
+    CHECK(response["result"]["gate_enabled"] == true);
+
+    response = client.exchange(
+        json{{"jsonrpc", "2.0"}, {"id", 3}, {"method", "set_gate"}, {"params", json::object()}});
+    CHECK(response["error"]["code"] == -32602);
 
     server.stop();
 }
