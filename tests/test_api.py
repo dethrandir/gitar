@@ -355,7 +355,7 @@ def test_models_lists_scanned_models(
         "models": [
             {
                 "name": "amp",
-                "path": "/models/amp.nam",
+                "path": str(model.path),
                 "architecture": "WaveNet",
                 "sample_rate": 48000.0,
                 "size_bytes": 1234,

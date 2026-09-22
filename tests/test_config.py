@@ -1,7 +1,6 @@
 """Tests for the gitar_server configuration module."""
 
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -39,21 +38,15 @@ def test_config_dir_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert legacy_config_path() == target / "config"
 
 
-def test_config_dir_xdg_on_linux(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GITAR_CONFIG_DIR", raising=False)
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    monkeypatch.setattr(sys, "platform", "linux")
-    monkeypatch.setattr(os, "name", "posix")
-    assert config_dir() == tmp_path / "xdg" / "gitar"
+def test_config_dir_xdg_on_linux(tmp_path: Path) -> None:
+    env = {"XDG_CONFIG_HOME": str(tmp_path / "xdg")}
+    resolved = _resolve_config_dir(env, "linux", tmp_path, "posix")
+    assert resolved == tmp_path / "xdg" / "gitar"
 
 
-def test_config_dir_home_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GITAR_CONFIG_DIR", raising=False)
-    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-    monkeypatch.setattr(sys, "platform", "linux")
-    monkeypatch.setattr(os, "name", "posix")
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    assert config_dir() == tmp_path / ".config" / "gitar"
+def test_config_dir_home_fallback(tmp_path: Path) -> None:
+    resolved = _resolve_config_dir({}, "linux", tmp_path, "posix")
+    assert resolved == tmp_path / ".config" / "gitar"
 
 
 def test_config_dir_windows_appdata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -73,12 +66,9 @@ def test_resolve_config_dir_windows_without_appdata(tmp_path: Path) -> None:
     assert resolved == tmp_path / "AppData" / "Roaming" / "gitar"
 
 
-def test_config_dir_macos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GITAR_CONFIG_DIR", raising=False)
-    monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setattr(os, "name", "posix")
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    assert config_dir() == tmp_path / "Library" / "Application Support" / "gitar"
+def test_config_dir_macos(tmp_path: Path) -> None:
+    resolved = _resolve_config_dir({}, "darwin", tmp_path, "posix")
+    assert resolved == tmp_path / "Library" / "Application Support" / "gitar"
 
 
 @pytest.mark.parametrize(
