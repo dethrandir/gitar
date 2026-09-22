@@ -69,7 +69,10 @@ jobs:
           fi
       - name: Install build tools
         if: steps.detect.outputs.present == 'true'
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build clang-format \
+            libasound2-dev libpulse-dev libjack-jackd2-dev
       - name: Configure
         if: steps.detect.outputs.present == 'true'
         run: cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release
@@ -82,5 +85,5 @@ jobs:
       - name: Format check
         if: steps.detect.outputs.present == 'true'
         run: |
-          files=$(git ls-files 'engine/*.cpp' 'engine/*.hpp' 'engine/*.h' 'engine/*.cc')
+          files=$(git ls-files engine | grep -E '\.(cpp|hpp|cc|h)$' | grep -v '^engine/third_party/' || true)
           if [ -n "$files" ]; then clang-format --dry-run --Werror $files; fi
