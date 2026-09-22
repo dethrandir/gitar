@@ -222,6 +222,73 @@ TEST_CASE("load_model loads a fixture and clear_model resets it") {
     server.stop();
 }
 
+TEST_CASE("load_cab loads a fixture and set_eq round-trips") {
+    gitar::Engine engine;
+    gitar::ControlServer server(engine);
+    std::string error;
+    REQUIRE(server.start("127.0.0.1", 0, &error));
+
+    LoopbackClient client(server.port());
+    json response = client.exchange(json{{"jsonrpc", "2.0"},
+                                         {"id", 1},
+                                         {"method", "load_cab"},
+                                         {"params", {{"path", fixture_path("impulse.wav")}}}});
+    REQUIRE_FALSE(response.contains("error"));
+    CHECK(response["result"]["cab_ir_loaded"] == true);
+    CHECK(response["result"]["cab_ir_path"] == fixture_path("impulse.wav"));
+
+    response = client.exchange(json{{"jsonrpc", "2.0"},
+                                    {"id", 2},
+                                    {"method", "set_eq"},
+                                    {"params", {{"low_db", 3.0}, {"high_db", -3.0}}}});
+    REQUIRE_FALSE(response.contains("error"));
+    CHECK(response["result"]["eq_low_db"] == doctest::Approx(3.0));
+    CHECK(response["result"]["eq_mid_db"] == doctest::Approx(0.0));
+    CHECK(response["result"]["eq_high_db"] == doctest::Approx(-3.0));
+
+    response = client.exchange(
+        json{{"jsonrpc", "2.0"}, {"id", 3}, {"method", "set_eq"}, {"params", json::object()}});
+    CHECK(response["error"]["code"] == -32602);
+
+    server.stop();
+}
+
+TEST_CASE("load_cab reports a missing impulse response") {
+    gitar::Engine engine;
+    gitar::ControlServer server(engine);
+    std::string error;
+    REQUIRE(server.start("127.0.0.1", 0, &error));
+
+    LoopbackClient client(server.port());
+    const json response =
+        client.exchange(json{{"jsonrpc", "2.0"},
+                             {"id", 1},
+                             {"method", "load_cab"},
+                             {"params", {{"path", fixture_path("does_not_exist.wav")}}}});
+    CHECK(response["error"]["code"] == -32000);
+
+    server.stop();
+}
+
+TEST_CASE("start validates the eq and cabinet parameters") {
+    gitar::Engine engine;
+    gitar::ControlServer server(engine);
+    std::string error;
+    REQUIRE(server.start("127.0.0.1", 0, &error));
+
+    LoopbackClient client(server.port());
+
+    json response = client.exchange(json{
+        {"jsonrpc", "2.0"}, {"id", 1}, {"method", "start"}, {"params", {{"eq_low_db", "loud"}}}});
+    CHECK(response["error"]["code"] == -32602);
+
+    response = client.exchange(
+        json{{"jsonrpc", "2.0"}, {"id", 2}, {"method", "start"}, {"params", {{"cab_ir_path", 5}}}});
+    CHECK(response["error"]["code"] == -32602);
+
+    server.stop();
+}
+
 TEST_CASE("set_gate updates the status and requires at least one parameter") {
     gitar::Engine engine;
     gitar::ControlServer server(engine);

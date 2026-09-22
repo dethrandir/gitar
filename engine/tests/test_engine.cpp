@@ -84,6 +84,43 @@ TEST_CASE("load_model reports a missing model with an error") {
     CHECK_FALSE(engine.model_loaded());
 }
 
+TEST_CASE("load_cab_ir loads a fixture, clears and reports a missing file") {
+    gitar::Engine engine;
+    CHECK_FALSE(engine.cab_ir_loaded());
+    CHECK(engine.cab_ir_path().empty());
+
+    std::string error;
+    REQUIRE(engine.load_cab_ir(fixture("impulse.wav").string(), &error));
+    CHECK(error.empty());
+    CHECK(engine.cab_ir_loaded());
+    CHECK(engine.cab_ir_path() == fixture("impulse.wav").string());
+
+    REQUIRE(engine.load_cab_ir(""));
+    CHECK_FALSE(engine.cab_ir_loaded());
+    CHECK(engine.cab_ir_path().empty());
+
+    CHECK_FALSE(engine.load_cab_ir(fixture("does_not_exist.wav").string(), &error));
+    CHECK_FALSE(error.empty());
+    CHECK_FALSE(engine.cab_ir_loaded());
+}
+
+TEST_CASE("set_eq round-trips and clamps") {
+    gitar::Engine engine;
+    CHECK(engine.eq_low_db() == doctest::Approx(0.0f));
+    CHECK(engine.eq_mid_db() == doctest::Approx(0.0f));
+    CHECK(engine.eq_high_db() == doctest::Approx(0.0f));
+
+    engine.set_eq(3.0f, 0.0f, -3.0f);
+    CHECK(engine.eq_low_db() == doctest::Approx(3.0f));
+    CHECK(engine.eq_mid_db() == doctest::Approx(0.0f));
+    CHECK(engine.eq_high_db() == doctest::Approx(-3.0f));
+
+    engine.set_eq(-100.0f, 100.0f, 0.0f);
+    CHECK(engine.eq_low_db() == doctest::Approx(-24.0f));
+    CHECK(engine.eq_mid_db() == doctest::Approx(24.0f));
+    CHECK(engine.eq_high_db() == doctest::Approx(0.0f));
+}
+
 TEST_CASE("the gate settings round-trip and clamp") {
     gitar::Engine engine;
     CHECK(engine.gate_enabled());

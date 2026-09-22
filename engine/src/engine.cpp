@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -9,6 +10,7 @@
 #include <vector>
 
 #include "gitar/bridge.hpp"
+#include "gitar/eq.hpp"
 #include "gitar/level_meter.hpp"
 #include "gitar/neural_model.hpp"
 #include "gitar/noise_gate.hpp"
@@ -22,6 +24,11 @@ void set_error(std::string* error, std::string message) {
     if (error != nullptr) {
         *error = std::move(message);
     }
+}
+
+float clamp_eq_db(float db) {
+    const float finite = std::isfinite(db) ? db : 0.0f;
+    return std::clamp(finite, -24.0f, 24.0f);
 }
 
 // miniaudio 0.11.21 does not expose ma_device_get_latency, so derive the
@@ -51,18 +58,27 @@ struct Engine::Impl {
     std::unique_ptr<GainProcessor> processor;
     std::unique_ptr<LevelMeter> input_meter;
     std::unique_ptr<NoiseGate> gate;
+    std::unique_ptr<ThreeBandEq> eq;
 
     // The control thread swaps this while the playback callback reads it, so the
     // callback never observes a half-built model. shared_ptr keeps the old model
     // alive until the callback that loaded it has finished.
     std::atomic<std::shared_ptr<NeuralModel>> model;
     std::string model_path;
+
+    // Cabinet IR, loaded through the same neural model machinery (a WAV IR is a
+    // linear model). Swapped off the audio thread exactly like the amp model.
+    std::atomic<std::shared_ptr<NeuralModel>> cab;
+    std::string cab_ir_path;
     std::vector<float> mono_scratch;
 
     std::atomic<bool> running{false};
     std::atomic<float> requested_gain{1.0f};
     std::atomic<bool> requested_gate_enabled{true};
     std::atomic<float> requested_gate_threshold_db{-60.0f};
+    std::atomic<float> requested_eq_low_db{0.0f};
+    std::atomic<float> requested_eq_mid_db{0.0f};
+    std::atomic<float> requested_eq_high_db{0.0f};
     std::uint32_t actual_sample_rate = 48000;
     std::uint32_t actual_period_frames = 0;
 
@@ -103,8 +119,11 @@ void Engine::Impl::playback_callback(ma_device* device, void* output, const void
     self->bridge->read(samples, frame_count);
 
     NoiseGate* const gate = self->gate.get();
+    ThreeBandEq* const eq = self->eq.get();
     const std::shared_ptr<NeuralModel> model = self->model.load(std::memory_order_acquire);
-    if ((gate != nullptr && gate->enabled()) || model != nullptr) {
+    const std::shared_ptr<NeuralModel> cab = self->cab.load(std::memory_order_acquire);
+    if ((gate != nullptr && gate->enabled()) || model != nullptr || cab != nullptr ||
+        eq != nullptr) {
         const std::uint32_t channels = self->config.channels;
         const std::size_t capacity = self->mono_scratch.size();
         std::size_t offset = 0;
@@ -119,6 +138,12 @@ void Engine::Impl::playback_callback(ma_device* device, void* output, const void
             }
             if (model != nullptr) {
                 model->process(mono, mono, static_cast<int>(chunk));
+            }
+            if (cab != nullptr) {
+                cab->process(mono, mono, static_cast<int>(chunk));
+            }
+            if (eq != nullptr) {
+                eq->process(mono, chunk);
             }
             for (std::size_t i = 0; i < chunk; ++i) {
                 for (std::uint32_t channel = 0; channel < channels; ++channel) {
@@ -192,6 +217,22 @@ bool Engine::Impl::start(const EngineConfig& requested, std::string* error) {
         model_path = config.model_path;
     }
 
+    if (config.cab_ir_path.empty()) {
+        cab.store(std::shared_ptr<NeuralModel>{}, std::memory_order_release);
+        cab_ir_path.clear();
+    } else {
+        auto loaded = std::make_shared<NeuralModel>();
+        std::string cab_error;
+        if (!loaded->load(config.cab_ir_path, &cab_error)) {
+            set_error(error, cab_error.empty() ? "failed to load cabinet IR: " + config.cab_ir_path
+                                               : cab_error);
+            release();
+            return false;
+        }
+        cab.store(std::move(loaded), std::memory_order_release);
+        cab_ir_path = config.cab_ir_path;
+    }
+
     if (ma_context_init(nullptr, 0, nullptr, &context) != MA_SUCCESS) {
         set_error(error, "failed to initialize the audio context");
         release();
@@ -208,6 +249,13 @@ bool Engine::Impl::start(const EngineConfig& requested, std::string* error) {
     gate->set_enabled(config.gate_enabled);
     requested_gate_enabled.store(config.gate_enabled, std::memory_order_relaxed);
     requested_gate_threshold_db.store(gate->threshold_db(), std::memory_order_relaxed);
+    eq = std::make_unique<ThreeBandEq>(static_cast<float>(config.sample_rate));
+    eq->set_low_gain_db(config.eq_low_db);
+    eq->set_mid_gain_db(config.eq_mid_db);
+    eq->set_high_gain_db(config.eq_high_db);
+    requested_eq_low_db.store(eq->low_gain_db(), std::memory_order_relaxed);
+    requested_eq_mid_db.store(eq->mid_gain_db(), std::memory_order_relaxed);
+    requested_eq_high_db.store(eq->high_gain_db(), std::memory_order_relaxed);
     mono_scratch.assign(config.period_frames, 0.0f);
 
     const ma_device_id* input_id = nullptr;
@@ -292,6 +340,7 @@ void Engine::Impl::release() {
     processor.reset();
     input_meter.reset();
     gate.reset();
+    eq.reset();
     mono_scratch.clear();
     running.store(false, std::memory_order_relaxed);
     actual_period_frames = 0;
@@ -364,6 +413,70 @@ bool Engine::model_loaded() const {
 
 std::string Engine::model_path() const {
     return impl_->model_path;
+}
+
+bool Engine::load_cab_ir(const std::string& path, std::string* error) {
+    if (error != nullptr) {
+        error->clear();
+    }
+    if (path.empty()) {
+        impl_->cab.store(std::shared_ptr<NeuralModel>{}, std::memory_order_release);
+        impl_->cab_ir_path.clear();
+        return true;
+    }
+
+    auto loaded = std::make_shared<NeuralModel>();
+    std::string cab_error;
+    if (!loaded->load(path, &cab_error)) {
+        if (error != nullptr) {
+            *error = cab_error.empty() ? "failed to load cabinet IR: " + path : cab_error;
+        }
+        return false;
+    }
+    impl_->cab.store(std::move(loaded), std::memory_order_release);
+    impl_->cab_ir_path = path;
+    return true;
+}
+
+bool Engine::cab_ir_loaded() const {
+    const std::shared_ptr<NeuralModel> cab = impl_->cab.load(std::memory_order_acquire);
+    return cab != nullptr;
+}
+
+std::string Engine::cab_ir_path() const {
+    return impl_->cab_ir_path;
+}
+
+void Engine::set_eq(float low_db, float mid_db, float high_db) {
+    impl_->requested_eq_low_db.store(clamp_eq_db(low_db), std::memory_order_relaxed);
+    impl_->requested_eq_mid_db.store(clamp_eq_db(mid_db), std::memory_order_relaxed);
+    impl_->requested_eq_high_db.store(clamp_eq_db(high_db), std::memory_order_relaxed);
+    if (impl_->eq != nullptr) {
+        impl_->eq->set_low_gain_db(low_db);
+        impl_->eq->set_mid_gain_db(mid_db);
+        impl_->eq->set_high_gain_db(high_db);
+    }
+}
+
+float Engine::eq_low_db() const {
+    if (impl_->eq != nullptr) {
+        return impl_->eq->low_gain_db();
+    }
+    return impl_->requested_eq_low_db.load(std::memory_order_relaxed);
+}
+
+float Engine::eq_mid_db() const {
+    if (impl_->eq != nullptr) {
+        return impl_->eq->mid_gain_db();
+    }
+    return impl_->requested_eq_mid_db.load(std::memory_order_relaxed);
+}
+
+float Engine::eq_high_db() const {
+    if (impl_->eq != nullptr) {
+        return impl_->eq->high_gain_db();
+    }
+    return impl_->requested_eq_high_db.load(std::memory_order_relaxed);
 }
 
 void Engine::set_gate_enabled(bool enabled) {

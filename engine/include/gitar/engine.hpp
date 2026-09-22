@@ -14,8 +14,12 @@ struct EngineConfig {
     std::uint32_t channels = 2;
     float gain = 1.0f;
     std::string model_path;            // empty = no neural model
+    std::string cab_ir_path;           // empty = no cabinet IR
     bool gate_enabled = true;          // noise gate enabled on start
     float gate_threshold_db = -60.0f;  // noise gate threshold in dBFS
+    float eq_low_db = 0.0f;            // three-band EQ low-shelf gain
+    float eq_mid_db = 0.0f;            // three-band EQ mid-peaking gain
+    float eq_high_db = 0.0f;           // three-band EQ high-shelf gain
 };
 
 // Owns a capture device and a playback device connected by a lock-free bridge.
@@ -41,6 +45,19 @@ class Engine {
     bool load_model(const std::string& path, std::string* error = nullptr);
     bool model_loaded() const;
     std::string model_path() const;
+
+    // Loads (or clears, with an empty path) the cabinet impulse response. A WAV
+    // IR is handled by the same neural model loader. May allocate; never call
+    // from the audio thread.
+    bool load_cab_ir(const std::string& path, std::string* error = nullptr);
+    bool cab_ir_loaded() const;
+    std::string cab_ir_path() const;
+
+    // Three-band EQ gains in dB, clamped to [-24, +24].
+    void set_eq(float low_db, float mid_db, float high_db);
+    float eq_low_db() const;
+    float eq_mid_db() const;
+    float eq_high_db() const;
 
     void set_gate_enabled(bool enabled);
     bool gate_enabled() const;

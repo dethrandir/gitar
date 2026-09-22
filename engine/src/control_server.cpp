@@ -119,8 +119,13 @@ json engine_status(Engine& engine) {
         {"underrun_frames", engine.underrun_frames()},
         {"model_loaded", engine.model_loaded()},
         {"model_path", engine.model_path()},
+        {"cab_ir_loaded", engine.cab_ir_loaded()},
+        {"cab_ir_path", engine.cab_ir_path()},
         {"gate_enabled", engine.gate_enabled()},
         {"gate_threshold_db", engine.gate_threshold_db()},
+        {"eq_low_db", engine.eq_low_db()},
+        {"eq_mid_db", engine.eq_mid_db()},
+        {"eq_high_db", engine.eq_high_db()},
     };
 }
 
@@ -174,6 +179,13 @@ bool apply_start_params(const json& params, EngineConfig* config, std::string* e
         }
         config->model_path = params["model_path"].get<std::string>();
     }
+    if (params.contains("cab_ir_path")) {
+        if (!params["cab_ir_path"].is_string()) {
+            set_error(error, "cab_ir_path must be a string");
+            return false;
+        }
+        config->cab_ir_path = params["cab_ir_path"].get<std::string>();
+    }
     if (params.contains("gate_enabled")) {
         if (!params["gate_enabled"].is_boolean()) {
             set_error(error, "gate_enabled must be a boolean");
@@ -187,6 +199,20 @@ bool apply_start_params(const json& params, EngineConfig* config, std::string* e
             return false;
         }
         config->gate_threshold_db = params["gate_threshold_db"].get<float>();
+    }
+
+    const char* const eq_fields[] = {"eq_low_db", "eq_mid_db", "eq_high_db"};
+    float* const eq_targets[] = {&config->eq_low_db, &config->eq_mid_db, &config->eq_high_db};
+    for (std::size_t i = 0; i < 3; ++i) {
+        const char* name = eq_fields[i];
+        if (!params.contains(name)) {
+            continue;
+        }
+        if (!params[name].is_number()) {
+            set_error(error, std::string(name) + " must be a number");
+            return false;
+        }
+        *eq_targets[i] = params[name].get<float>();
     }
     return true;
 }
@@ -313,6 +339,25 @@ std::string ControlServer::Impl::process_line(const std::string& line) {
         engine->load_model("");
         return success(id, engine_status(*engine)).dump();
     }
+    if (method == "load_cab") {
+        if (!params.is_object() || !params.contains("path") || !params["path"].is_string()) {
+            return failure(id, -32602, "invalid params: path is required").dump();
+        }
+        const std::string path = params["path"].get<std::string>();
+        std::string load_error;
+        bool loaded = false;
+        {
+            std::lock_guard<std::mutex> lock(engine_mutex);
+            loaded = engine->load_cab_ir(path, &load_error);
+        }
+        if (!loaded) {
+            return failure(id, -32000,
+                           load_error.empty() ? "failed to load cabinet IR" : load_error)
+                .dump();
+        }
+        std::lock_guard<std::mutex> lock(engine_mutex);
+        return success(id, engine_status(*engine)).dump();
+    }
     if (method == "set_gate") {
         if (!params.is_object()) {
             return failure(id, -32602, "invalid params").dump();
@@ -336,6 +381,33 @@ std::string ControlServer::Impl::process_line(const std::string& line) {
         if (has_threshold) {
             engine->set_gate_threshold_db(params["threshold_db"].get<float>());
         }
+        return success(id, engine_status(*engine)).dump();
+    }
+    if (method == "set_eq") {
+        if (!params.is_object()) {
+            return failure(id, -32602, "invalid params").dump();
+        }
+        const bool has_low = params.contains("low_db");
+        const bool has_mid = params.contains("mid_db");
+        const bool has_high = params.contains("high_db");
+        if (!has_low && !has_mid && !has_high) {
+            return failure(id, -32602, "invalid params: low_db, mid_db or high_db is required")
+                .dump();
+        }
+        if (has_low && !params["low_db"].is_number()) {
+            return failure(id, -32602, "invalid params: low_db must be a number").dump();
+        }
+        if (has_mid && !params["mid_db"].is_number()) {
+            return failure(id, -32602, "invalid params: mid_db must be a number").dump();
+        }
+        if (has_high && !params["high_db"].is_number()) {
+            return failure(id, -32602, "invalid params: high_db must be a number").dump();
+        }
+        std::lock_guard<std::mutex> lock(engine_mutex);
+        const float low = has_low ? params["low_db"].get<float>() : engine->eq_low_db();
+        const float mid = has_mid ? params["mid_db"].get<float>() : engine->eq_mid_db();
+        const float high = has_high ? params["high_db"].get<float>() : engine->eq_high_db();
+        engine->set_eq(low, mid, high);
         return success(id, engine_status(*engine)).dump();
     }
     if (method == "start") {
