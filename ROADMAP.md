@@ -88,15 +88,17 @@ gitar/
 ### M3 — Neural amp models
 - [x] M3.1 Integrate NAM DSP core, `.nam` loader, unit tests
 - [x] M3.2 DSP chain: gate → NAM amp → output, model swap over the protocol
-- [ ] M3.2b EQ + cabinet IR stage
+- [x] M3.2b EQ + cabinet IR stage
 - [x] M3.3 Model registry + engine process control + engine API, TDD
 - [x] M3.4 Web UI: engine panel + model browser
 
 ### M4 — Web UI polish
-- [ ] M4.1 Knobs/faders component, responsive layout, dark theme
-- [ ] M4.2 Tuner + spectrum analyzer
-- [ ] M4.3 Recording + metronome
-- [ ] M4.4 Preset save/load/share
+- [x] M4.1 Engine controls in the web UI: EQ, cabinet IR, presets
+- [x] M4.2 Responsive layout and dark theme for the engine panel
+- [x] M4.3 Preset save/load/delete/apply
+- [ ] M4.4 Knob/fader components and layout polish
+- [ ] M4.5 Tuner + spectrum analyzer (needs engine PCM/pitch telemetry)
+- [ ] M4.6 Recording + metronome
 
 ### M5 — Windows
 - [x] M5.1 WASAPI device enumeration + selection (via miniaudio; engine builds on Windows)
@@ -107,8 +109,8 @@ gitar/
 
 ### M6 — Packaging & release
 - [x] M6.1 Build native binaries (Linux + Windows) and attach to releases
-- [ ] M6.2 Publish the wheel to PyPI (currently only attached to releases)
-- [ ] M6.3 Versioning + changelog automation
+- [x] M6.2 PyPI trusted-publishing job in the release workflow
+- [x] M6.3 Version sync guard + bump script
 - [ ] M6.4 Linux one-liner installer downloads the matching engine binary
 
 ## Open questions / decisions log
