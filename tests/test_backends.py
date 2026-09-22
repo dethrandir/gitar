@@ -122,8 +122,10 @@ def test_null_backend_load_unknown_tone() -> None:
         backend.load_tone(Config(), "nope")
 
 
-def test_get_backend_linux_falls_back_to_null() -> None:
-    assert isinstance(get_backend("linux"), NullBackend)
+def test_get_backend_linux_returns_pipewire() -> None:
+    from gitar_server.backends.pipewire import PipeWireBackend
+
+    assert isinstance(get_backend("linux"), PipeWireBackend)
 
 
 def test_get_backend_windows_falls_back_to_null() -> None:
