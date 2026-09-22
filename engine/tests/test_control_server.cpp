@@ -154,6 +154,8 @@ TEST_CASE("status on a fresh server is stopped with numeric defaults") {
     CHECK(result["gain"] == doctest::Approx(1.0));
     CHECK(result["input_peak_db"].is_number());
     CHECK(result["output_peak_db"].is_number());
+    CHECK(result["pitch_hz"] == doctest::Approx(0.0));
+    CHECK(result["pitch_confidence"] == doctest::Approx(0.0));
     CHECK(result["latency_ms"].is_number());
     CHECK(result["sample_rate"].is_number_integer());
     CHECK(result["period_frames"].is_number_integer());

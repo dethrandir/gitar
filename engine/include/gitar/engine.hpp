@@ -67,6 +67,11 @@ class Engine {
     float input_peak_db() const;
     float output_peak_db() const;
 
+    // Monophonic pitch of the input, 0 Hz when no confident pitch is present
+    // (including while the engine is not running).
+    float pitch_hz() const;
+    float pitch_confidence() const;
+
     double latency_ms() const;
     std::uint32_t sample_rate() const;
     std::uint32_t period_frames() const;

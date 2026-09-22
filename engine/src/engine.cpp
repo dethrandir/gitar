@@ -14,6 +14,7 @@
 #include "gitar/level_meter.hpp"
 #include "gitar/neural_model.hpp"
 #include "gitar/noise_gate.hpp"
+#include "gitar/pitch_detector.hpp"
 #include "gitar/processor.hpp"
 #include "miniaudio.h"
 
@@ -57,6 +58,7 @@ struct Engine::Impl {
     std::unique_ptr<InterleavedBridge> bridge;
     std::unique_ptr<GainProcessor> processor;
     std::unique_ptr<LevelMeter> input_meter;
+    std::unique_ptr<PitchDetector> pitch_detector;
     std::unique_ptr<NoiseGate> gate;
     std::unique_ptr<ThreeBandEq> eq;
 
@@ -71,6 +73,7 @@ struct Engine::Impl {
     std::atomic<std::shared_ptr<NeuralModel>> cab;
     std::string cab_ir_path;
     std::vector<float> mono_scratch;
+    std::vector<float> pitch_scratch;
 
     std::atomic<bool> running{false};
     std::atomic<float> requested_gain{1.0f};
@@ -104,6 +107,23 @@ void Engine::Impl::capture_callback(ma_device* device, void* output, const void*
     const std::size_t sample_count = static_cast<std::size_t>(frame_count) * self->config.channels;
     if (self->input_meter != nullptr) {
         self->input_meter->process(samples, sample_count);
+    }
+    if (self->pitch_detector != nullptr) {
+        const std::uint32_t channels = self->config.channels;
+        const std::size_t capacity = self->pitch_scratch.size();
+        if (channels <= 1) {
+            self->pitch_detector->process(samples, frame_count);
+        } else if (capacity > 0) {
+            std::size_t offset = 0;
+            while (offset < frame_count) {
+                const std::size_t chunk = std::min<std::size_t>(capacity, frame_count - offset);
+                for (std::size_t i = 0; i < chunk; ++i) {
+                    self->pitch_scratch[i] = samples[(offset + i) * channels];
+                }
+                self->pitch_detector->process(self->pitch_scratch.data(), chunk);
+                offset += chunk;
+            }
+        }
     }
     self->bridge->write(samples, frame_count);
 }
@@ -244,6 +264,7 @@ bool Engine::Impl::start(const EngineConfig& requested, std::string* error) {
     processor = std::make_unique<GainProcessor>(config.sample_rate, config.channels);
     processor->set_gain(config.gain);
     input_meter = std::make_unique<LevelMeter>(static_cast<float>(config.sample_rate));
+    pitch_detector = std::make_unique<PitchDetector>(static_cast<float>(config.sample_rate));
     gate = std::make_unique<NoiseGate>(static_cast<float>(config.sample_rate),
                                        config.gate_threshold_db);
     gate->set_enabled(config.gate_enabled);
@@ -257,6 +278,7 @@ bool Engine::Impl::start(const EngineConfig& requested, std::string* error) {
     requested_eq_mid_db.store(eq->mid_gain_db(), std::memory_order_relaxed);
     requested_eq_high_db.store(eq->high_gain_db(), std::memory_order_relaxed);
     mono_scratch.assign(config.period_frames, 0.0f);
+    pitch_scratch.assign(config.period_frames, 0.0f);
 
     const ma_device_id* input_id = nullptr;
     if (!resolve_device_id(ma_device_type_capture, config.input_device, &input_id)) {
@@ -339,9 +361,11 @@ void Engine::Impl::release() {
     bridge.reset();
     processor.reset();
     input_meter.reset();
+    pitch_detector.reset();
     gate.reset();
     eq.reset();
     mono_scratch.clear();
+    pitch_scratch.clear();
     running.store(false, std::memory_order_relaxed);
     actual_period_frames = 0;
 }
@@ -514,6 +538,14 @@ float Engine::input_peak_db() const {
 
 float Engine::output_peak_db() const {
     return impl_->processor != nullptr ? impl_->processor->meter().peak_db() : -120.0f;
+}
+
+float Engine::pitch_hz() const {
+    return impl_->pitch_detector != nullptr ? impl_->pitch_detector->pitch_hz() : 0.0f;
+}
+
+float Engine::pitch_confidence() const {
+    return impl_->pitch_detector != nullptr ? impl_->pitch_detector->confidence() : 0.0f;
 }
 
 double Engine::latency_ms() const {

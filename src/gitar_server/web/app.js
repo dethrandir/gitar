@@ -55,6 +55,10 @@
     engineInputPeak: document.getElementById("engine-input-peak"),
     engineOutputPeak: document.getElementById("engine-output-peak"),
     engineDetails: document.getElementById("engine-details"),
+    engineTuner: document.getElementById("engine-tuner"),
+    tunerNote: document.getElementById("tuner-note"),
+    tunerCents: document.getElementById("tuner-cents"),
+    tunerNeedle: document.getElementById("tuner-needle"),
   };
 
   const state = {
@@ -66,14 +70,17 @@
   };
 
   const ENGINE_POLL_MS = 500;
+  const TUNER_POLL_MS = 200;
   const LEVEL_MIN_DB = -60;
   const EQ_DEBOUNCE_MS = 200;
+  const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
   let flashTimer = null;
   let socket = null;
   let reconnectTimer = null;
   let reconnectAttempts = 0;
   let engineTimer = null;
+  let tunerTimer = null;
   let eqTimer = null;
 
   async function api(path, options = {}) {
@@ -433,12 +440,41 @@
     elements.engineOutputBar.style.width = `${levelPercent(status.output_peak_db)}%`;
   }
 
+  function hzToNote(hz, a4 = 440) {
+    if (!Number.isFinite(hz) || hz <= 0) return null;
+    const midi = 69 + 12 * Math.log2(hz / a4);
+    const nearest = Math.floor(midi + 0.5);
+    return {
+      name: NOTE_NAMES[((nearest % 12) + 12) % 12],
+      octave: Math.floor(nearest / 12) - 1,
+      cents: 100 * (midi - nearest),
+    };
+  }
+
+  function renderTuner(status) {
+    const hz = status && typeof status.pitch_hz === "number" ? status.pitch_hz : 0;
+    const note = hzToNote(hz);
+    if (!note) {
+      elements.tunerNote.textContent = "—";
+      elements.tunerCents.textContent = "";
+      elements.tunerNeedle.style.left = "50%";
+      elements.engineTuner.dataset.state = "idle";
+      return;
+    }
+    const cents = Math.max(-50, Math.min(50, note.cents));
+    elements.tunerNote.textContent = `${note.name}${note.octave}`;
+    elements.tunerCents.textContent = `${cents >= 0 ? "+" : ""}${cents.toFixed(0)} cents`;
+    elements.tunerNeedle.style.left = `${50 + cents}%`;
+    elements.engineTuner.dataset.state = Math.abs(cents) <= 5 ? "in-tune" : "active";
+  }
+
   function renderEngineStatus(status) {
     state.engineAvailable = true;
     state.engineRunning = Boolean(status.running);
     applyEngineControls();
     renderEngineDetails(status);
     renderEngineLevels(status);
+    renderTuner(status);
     if (typeof status.gain === "number") {
       elements.engineGain.value = String(status.gain);
       renderGainValue(status.gain);
@@ -476,6 +512,7 @@
     elements.engineOutputBar.style.width = "0%";
     elements.engineInputPeak.textContent = "—";
     elements.engineOutputPeak.textContent = "—";
+    renderTuner(null);
   }
 
   async function refreshEngineStatus() {
@@ -483,6 +520,16 @@
       renderEngineStatus(await api("/api/engine/status"));
     } catch {
       renderEngineOffline();
+    }
+  }
+
+  // The tuner needs a faster cadence than the control poll, so it keeps its own
+  // timer and only touches the readout.
+  async function refreshTunerStatus() {
+    try {
+      renderTuner(await api("/api/engine/status"));
+    } catch {
+      renderTuner(null);
     }
   }
 
@@ -494,6 +541,16 @@
   function stopEnginePolling() {
     window.clearInterval(engineTimer);
     engineTimer = null;
+  }
+
+  function startTunerPolling() {
+    if (tunerTimer !== null) return;
+    tunerTimer = window.setInterval(refreshTunerStatus, TUNER_POLL_MS);
+  }
+
+  function stopTunerPolling() {
+    window.clearInterval(tunerTimer);
+    tunerTimer = null;
   }
 
   async function loadEngineDevices() {
@@ -827,9 +884,12 @@
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         stopEnginePolling();
+        stopTunerPolling();
       } else {
         refreshEngineStatus();
+        refreshTunerStatus();
         startEnginePolling();
+        startTunerPolling();
       }
     });
   }
@@ -842,6 +902,7 @@
     renderEqValues();
     connectWs();
     startEnginePolling();
+    startTunerPolling();
     try {
       await applyConfig(await api("/api/config"));
       await loadTones();

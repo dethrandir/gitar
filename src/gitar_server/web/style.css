@@ -343,6 +343,84 @@ button:focus-visible {
   color: var(--ok);
 }
 
+.tuner {
+  margin-top: 0.9rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+
+.tuner-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tuner-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tuner-note {
+  min-width: 2.5rem;
+  font-size: 1.35rem;
+  font-weight: 600;
+}
+
+.tuner-cents {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.tuner[data-state="in-tune"] .tuner-note {
+  color: var(--ok);
+}
+
+.tuner-scale {
+  position: relative;
+  height: 0.6rem;
+  margin-top: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+}
+
+.tuner-center {
+  position: absolute;
+  top: -0.15rem;
+  bottom: -0.15rem;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: var(--ok);
+}
+
+.tuner-needle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  transform: translate(-50%, -50%);
+  transition: left 0.1s linear;
+}
+
+.tuner[data-state="in-tune"] .tuner-needle {
+  background: var(--ok);
+}
+
+.tuner[data-state="idle"] .tuner-needle {
+  opacity: 0;
+}
+
 @media (min-width: 640px) {
   .fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
