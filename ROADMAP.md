@@ -97,8 +97,9 @@ gitar/
 - [x] M4.2 Responsive layout and dark theme for the engine panel
 - [x] M4.3 Preset save/load/delete/apply
 - [ ] M4.4 Knob/fader components and layout polish
-- [ ] M4.5 Tuner + spectrum analyzer (needs engine PCM/pitch telemetry)
-- [ ] M4.6 Recording + metronome
+- [x] M4.5 Chromatic tuner (engine pitch detection + UI)
+- [ ] M4.6 Spectrum analyzer
+- [ ] M4.7 Recording + metronome
 
 ### M5 — Windows
 - [x] M5.1 WASAPI device enumeration + selection (via miniaudio; engine builds on Windows)
