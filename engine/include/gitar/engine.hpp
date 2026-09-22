@@ -23,6 +23,8 @@ struct EngineConfig {
     float eq_low_db = 0.0f;            // three-band EQ low-shelf gain
     float eq_mid_db = 0.0f;            // three-band EQ mid-peaking gain
     float eq_high_db = 0.0f;           // three-band EQ high-shelf gain
+    bool metronome_enabled = false;    // metronome click in the output
+    float metronome_bpm = 120.0f;      // metronome tempo
 };
 
 // Owns a capture device and a playback device connected by a lock-free bridge.
@@ -66,6 +68,23 @@ class Engine {
     bool gate_enabled() const;
     void set_gate_threshold_db(float db);
     float gate_threshold_db() const;
+
+    // Recording taps the final interleaved output. start_recording() may
+    // allocate and fails (with *error) if the WAV cannot be opened. Recording is
+    // independent of the engine run state: a recording keeps its format until it
+    // is stopped or the engine is destroyed.
+    bool start_recording(const std::string& path, std::string* error = nullptr);
+    void stop_recording();
+    bool recording() const;
+    std::string recording_path() const;
+    std::uint64_t recorded_frames() const;
+    std::uint64_t dropped_record_frames() const;
+
+    // The metronome is mixed into the output, never replacing it. bpm is clamped
+    // to [20, 400].
+    void set_metronome(bool enabled, float bpm);
+    bool metronome_enabled() const;
+    float metronome_bpm() const;
 
     float input_peak_db() const;
     float output_peak_db() const;

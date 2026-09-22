@@ -306,6 +306,20 @@ class _FakeEngine:
         self.calls.append(("load_cab", path))
         return self._result()
 
+    def set_metronome(
+        self, *, enabled: bool | None = None, bpm: float | None = None
+    ) -> dict[str, object]:
+        self.calls.append(("set_metronome", (enabled, bpm)))
+        return self._result()
+
+    def start_recording(self, path: str) -> dict[str, object]:
+        self.calls.append(("start_recording", path))
+        return self._result()
+
+    def stop_recording(self) -> dict[str, object]:
+        self.calls.append(("stop_recording", None))
+        return self._result()
+
     def shutdown(self) -> None:
         self.shutdown_calls += 1
 
@@ -522,6 +536,74 @@ def test_engine_cab_empty_path_clears(engine_app: tuple[TestClient, _FakeEngine]
 
     assert response.status_code == 200
     assert fake.calls[-1] == ("load_cab", "")
+
+
+def test_engine_metronome_requires_a_field(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, _ = engine_app
+
+    response = client.post("/api/engine/metronome", json={})
+
+    assert response.status_code == 422
+
+
+def test_engine_metronome_forwards_fields(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/metronome", json={"enabled": True, "bpm": 90.0})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("set_metronome", (True, 90.0))
+
+
+def test_engine_metronome_forwards_single_field(
+    engine_app: tuple[TestClient, _FakeEngine],
+) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/metronome", json={"bpm": 132.0})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("set_metronome", (None, 132.0))
+
+
+def test_engine_record_starts_with_path(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/record", json={"path": "take1.wav"})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("start_recording", "take1.wav")
+
+
+def test_engine_record_empty_path_stops(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/record", json={"path": ""})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("stop_recording", None)
+
+
+def test_engine_record_stop_sentinel_stops(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/record", json={"path": "stop"})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("stop_recording", None)
+
+
+def test_engine_start_forwards_metronome_params(
+    engine_app: tuple[TestClient, _FakeEngine],
+) -> None:
+    client, fake = engine_app
+
+    response = client.post(
+        "/api/engine/start", json={"metronome_enabled": True, "metronome_bpm": 100.0}
+    )
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("start", {"metronome_enabled": True, "metronome_bpm": 100.0})
 
 
 def test_engine_eq_error_maps_to_conflict(engine_app: tuple[TestClient, _FakeEngine]) -> None:

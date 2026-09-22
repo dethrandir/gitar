@@ -146,3 +146,49 @@ TEST_CASE("spectrum_db is silent while the engine is stopped") {
         CHECK(db == doctest::Approx(-120.0f));
     }
 }
+
+TEST_CASE("recording can be started and stopped through the engine") {
+    gitar::Engine engine;
+    CHECK_FALSE(engine.recording());
+    CHECK(engine.recording_path().empty());
+    CHECK(engine.recorded_frames() == 0);
+    CHECK(engine.dropped_record_frames() == 0);
+
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "gitar_engine_recording.wav";
+    std::filesystem::remove(path);
+
+    std::string error;
+    REQUIRE(engine.start_recording(path.string(), &error));
+    CHECK(error.empty());
+    CHECK(engine.recording());
+    CHECK(engine.recording_path() == path.string());
+
+    engine.stop_recording();
+    CHECK_FALSE(engine.recording());
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("start_recording reports a failure for an unwritable path") {
+    gitar::Engine engine;
+    std::string error;
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "gitar_missing_dir_xyz" / "out.wav";
+    CHECK_FALSE(engine.start_recording(path.string(), &error));
+    CHECK_FALSE(error.empty());
+    CHECK_FALSE(engine.recording());
+}
+
+TEST_CASE("the metronome settings round-trip and clamp") {
+    gitar::Engine engine;
+    CHECK_FALSE(engine.metronome_enabled());
+    CHECK(engine.metronome_bpm() == doctest::Approx(120.0f));
+
+    engine.set_metronome(true, 90.0f);
+    CHECK(engine.metronome_enabled());
+    CHECK(engine.metronome_bpm() == doctest::Approx(90.0f));
+
+    engine.set_metronome(false, 1000.0f);
+    CHECK_FALSE(engine.metronome_enabled());
+    CHECK(engine.metronome_bpm() == doctest::Approx(400.0f));
+}

@@ -325,6 +325,103 @@ TEST_CASE("set_gate updates the status and requires at least one parameter") {
     server.stop();
 }
 
+TEST_CASE("start_recording, stop_recording and the status counters round-trip") {
+    gitar::Engine engine;
+    gitar::ControlServer server(engine);
+    std::string error;
+    REQUIRE(server.start("127.0.0.1", 0, &error));
+
+    LoopbackClient client(server.port());
+
+    json status = client.exchange(request_with_id(1, "status"));
+    CHECK(status["result"]["recording"] == false);
+    CHECK(status["result"]["record_path"] == "");
+    CHECK(status["result"]["record_frames"] == 0);
+
+    const std::string path =
+        (std::filesystem::temp_directory_path() / "gitar_server_rec.wav").string();
+    std::filesystem::remove(path);
+    json response = client.exchange(json{{"jsonrpc", "2.0"},
+                                         {"id", 2},
+                                         {"method", "start_recording"},
+                                         {"params", {{"path", path}}}});
+    REQUIRE_FALSE(response.contains("error"));
+    CHECK(response["result"]["recording"] == true);
+    CHECK(response["result"]["record_path"] == path);
+
+    response = client.exchange(request_with_id(3, "stop_recording"));
+    REQUIRE_FALSE(response.contains("error"));
+    CHECK(response["result"]["recording"] == false);
+
+    response = client.exchange(json{{"jsonrpc", "2.0"},
+                                    {"id", 4},
+                                    {"method", "start_recording"},
+                                    {"params", {{"path", "/nonexistent_dir_xyz/out.wav"}}}});
+    CHECK(response["error"]["code"] == -32000);
+
+    response = client.exchange(json{
+        {"jsonrpc", "2.0"}, {"id", 5}, {"method", "start_recording"}, {"params", json::object()}});
+    CHECK(response["error"]["code"] == -32602);
+
+    std::filesystem::remove(path);
+    server.stop();
+}
+
+TEST_CASE("set_metronome updates the status and requires at least one parameter") {
+    gitar::Engine engine;
+    gitar::ControlServer server(engine);
+    std::string error;
+    REQUIRE(server.start("127.0.0.1", 0, &error));
+
+    LoopbackClient client(server.port());
+
+    json response = client.exchange(json{{"jsonrpc", "2.0"},
+                                         {"id", 1},
+                                         {"method", "set_metronome"},
+                                         {"params", {{"enabled", true}, {"bpm", 90.0}}}});
+    REQUIRE_FALSE(response.contains("error"));
+    CHECK(response["result"]["metronome_enabled"] == true);
+    CHECK(response["result"]["metronome_bpm"] == doctest::Approx(90.0));
+
+    response = client.exchange(json{
+        {"jsonrpc", "2.0"}, {"id", 2}, {"method", "set_metronome"}, {"params", {{"bpm", 1000.0}}}});
+    REQUIRE_FALSE(response.contains("error"));
+    CHECK(response["result"]["metronome_bpm"] == doctest::Approx(400.0));
+
+    response = client.exchange(json{
+        {"jsonrpc", "2.0"}, {"id", 3}, {"method", "set_metronome"}, {"params", json::object()}});
+    CHECK(response["error"]["code"] == -32602);
+
+    response = client.exchange(json{
+        {"jsonrpc", "2.0"}, {"id", 4}, {"method", "set_metronome"}, {"params", {{"enabled", 1}}}});
+    CHECK(response["error"]["code"] == -32602);
+
+    server.stop();
+}
+
+TEST_CASE("start validates the metronome parameters") {
+    gitar::Engine engine;
+    gitar::ControlServer server(engine);
+    std::string error;
+    REQUIRE(server.start("127.0.0.1", 0, &error));
+
+    LoopbackClient client(server.port());
+
+    json response = client.exchange(json{{"jsonrpc", "2.0"},
+                                         {"id", 1},
+                                         {"method", "start"},
+                                         {"params", {{"metronome_bpm", "fast"}}}});
+    CHECK(response["error"]["code"] == -32602);
+
+    response = client.exchange(json{{"jsonrpc", "2.0"},
+                                    {"id", 2},
+                                    {"method", "start"},
+                                    {"params", {{"metronome_enabled", "yes"}}}});
+    CHECK(response["error"]["code"] == -32602);
+
+    server.stop();
+}
+
 TEST_CASE("protocol errors are reported and do not kill the connection") {
     gitar::Engine engine;
     gitar::ControlServer server(engine);

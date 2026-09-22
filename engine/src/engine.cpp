@@ -12,10 +12,12 @@
 #include "gitar/bridge.hpp"
 #include "gitar/eq.hpp"
 #include "gitar/level_meter.hpp"
+#include "gitar/metronome.hpp"
 #include "gitar/neural_model.hpp"
 #include "gitar/noise_gate.hpp"
 #include "gitar/pitch_detector.hpp"
 #include "gitar/processor.hpp"
+#include "gitar/recorder.hpp"
 #include "gitar/spectrum_analyzer.hpp"
 #include "miniaudio.h"
 
@@ -63,6 +65,8 @@ struct Engine::Impl {
     std::unique_ptr<SpectrumAnalyzer> spectrum_analyzer;
     std::unique_ptr<NoiseGate> gate;
     std::unique_ptr<ThreeBandEq> eq;
+    std::unique_ptr<Metronome> metronome;
+    Recorder recorder;
 
     // The control thread swaps this while the playback callback reads it, so the
     // callback never observes a half-built model. shared_ptr keeps the old model
@@ -84,6 +88,8 @@ struct Engine::Impl {
     std::atomic<float> requested_eq_low_db{0.0f};
     std::atomic<float> requested_eq_mid_db{0.0f};
     std::atomic<float> requested_eq_high_db{0.0f};
+    std::atomic<bool> requested_metronome_enabled{false};
+    std::atomic<float> requested_metronome_bpm{120.0f};
     std::uint32_t actual_sample_rate = 48000;
     std::uint32_t actual_period_frames = 0;
 
@@ -191,6 +197,27 @@ void Engine::Impl::playback_callback(ma_device* device, void* output, const void
     if (self->processor != nullptr) {
         self->processor->process(samples, frame_count);
     }
+
+    Metronome* const metronome = self->metronome.get();
+    if (metronome != nullptr && metronome->enabled()) {
+        const std::uint32_t channels = self->config.channels;
+        const std::size_t capacity = self->mono_scratch.size();
+        std::size_t offset = 0;
+        while (offset < frame_count && capacity > 0) {
+            const std::size_t chunk = std::min<std::size_t>(capacity, frame_count - offset);
+            float* const mono = self->mono_scratch.data();
+            std::fill(mono, mono + chunk, 0.0f);
+            metronome->process(mono, chunk);
+            for (std::size_t i = 0; i < chunk; ++i) {
+                for (std::uint32_t channel = 0; channel < channels; ++channel) {
+                    samples[(offset + i) * channels + channel] += mono[i];
+                }
+            }
+            offset += chunk;
+        }
+    }
+
+    self->recorder.write(samples, frame_count);
 }
 
 bool Engine::Impl::resolve_device_id(ma_device_type type, const std::string& name,
@@ -292,6 +319,11 @@ bool Engine::Impl::start(const EngineConfig& requested, std::string* error) {
     requested_eq_low_db.store(eq->low_gain_db(), std::memory_order_relaxed);
     requested_eq_mid_db.store(eq->mid_gain_db(), std::memory_order_relaxed);
     requested_eq_high_db.store(eq->high_gain_db(), std::memory_order_relaxed);
+    metronome =
+        std::make_unique<Metronome>(static_cast<float>(config.sample_rate), config.metronome_bpm);
+    metronome->set_enabled(config.metronome_enabled);
+    requested_metronome_enabled.store(metronome->enabled(), std::memory_order_relaxed);
+    requested_metronome_bpm.store(metronome->bpm(), std::memory_order_relaxed);
     mono_scratch.assign(config.period_frames, 0.0f);
     analysis_scratch.assign(config.period_frames, 0.0f);
 
@@ -380,6 +412,7 @@ void Engine::Impl::release() {
     spectrum_analyzer.reset();
     gate.reset();
     eq.reset();
+    metronome.reset();
     mono_scratch.clear();
     analysis_scratch.clear();
     running.store(false, std::memory_order_relaxed);
@@ -546,6 +579,60 @@ float Engine::gate_threshold_db() const {
         return impl_->gate->threshold_db();
     }
     return impl_->requested_gate_threshold_db.load(std::memory_order_relaxed);
+}
+
+bool Engine::start_recording(const std::string& path, std::string* error) {
+    if (error != nullptr) {
+        error->clear();
+    }
+    const auto rate = static_cast<float>(sample_rate());
+    const std::uint32_t channels = impl_->config.channels != 0 ? impl_->config.channels : 1;
+    return impl_->recorder.start(path, rate, channels, error);
+}
+
+void Engine::stop_recording() {
+    impl_->recorder.stop();
+}
+
+bool Engine::recording() const {
+    return impl_->recorder.recording();
+}
+
+std::string Engine::recording_path() const {
+    return impl_->recorder.path();
+}
+
+std::uint64_t Engine::recorded_frames() const {
+    return impl_->recorder.frames_written();
+}
+
+std::uint64_t Engine::dropped_record_frames() const {
+    return impl_->recorder.frames_dropped();
+}
+
+void Engine::set_metronome(bool enabled, float bpm) {
+    const float finite = std::isfinite(bpm) ? bpm : 120.0f;
+    const float clamped = std::clamp(finite, 20.0f, 400.0f);
+    impl_->requested_metronome_enabled.store(enabled, std::memory_order_relaxed);
+    impl_->requested_metronome_bpm.store(clamped, std::memory_order_relaxed);
+    if (impl_->metronome != nullptr) {
+        impl_->metronome->set_enabled(enabled);
+        impl_->metronome->set_bpm(clamped);
+    }
+}
+
+bool Engine::metronome_enabled() const {
+    if (impl_->metronome != nullptr) {
+        return impl_->metronome->enabled();
+    }
+    return impl_->requested_metronome_enabled.load(std::memory_order_relaxed);
+}
+
+float Engine::metronome_bpm() const {
+    if (impl_->metronome != nullptr) {
+        return impl_->metronome->bpm();
+    }
+    return impl_->requested_metronome_bpm.load(std::memory_order_relaxed);
 }
 
 float Engine::input_peak_db() const {

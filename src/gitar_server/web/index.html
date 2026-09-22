@@ -185,6 +185,41 @@
           </div>
         </div>
 
+        <div class="field">
+          <label>Practice</label>
+          <div class="practice-controls">
+            <label class="checkbox" for="engine-metronome-enabled">
+              <input id="engine-metronome-enabled" type="checkbox" />
+              Metronome
+            </label>
+            <label class="practice-bpm" for="engine-metronome-bpm">
+              BPM
+              <input
+                id="engine-metronome-bpm"
+                type="number"
+                min="20"
+                max="400"
+                step="1"
+                value="120"
+              />
+            </label>
+          </div>
+          <div class="row">
+            <input
+              id="engine-record-name"
+              type="text"
+              value="recording.wav"
+              spellcheck="false"
+              aria-label="Recording file name"
+            />
+            <button type="button" id="engine-record-start">Record</button>
+            <button type="button" id="engine-record-stop" class="ghost">Stop</button>
+          </div>
+          <p class="record-status" id="engine-record-status" data-state="idle">
+            &mdash;
+          </p>
+        </div>
+
         <div class="levels">
           <div class="level-row">
             <span class="level-label">In</span>

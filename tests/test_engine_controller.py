@@ -60,6 +60,12 @@ class _State:
             return {"running": True, "eq": params}
         if method == "load_cab":
             return {"running": True, "cab_ir_path": params.get("path")}
+        if method == "set_metronome":
+            return {"running": True, "metronome": params}
+        if method == "start_recording":
+            return {"recording": True, "record_path": params.get("path")}
+        if method == "stop_recording":
+            return {"recording": False}
         return {"ok": True}
 
 
@@ -234,6 +240,39 @@ def test_load_cab_sends_path(engine_server: _Engine) -> None:
 
     assert controller.load_cab("")["cab_ir_path"] == ""
     assert engine_server.state.requests[-1]["params"] == {"path": ""}
+
+    controller.shutdown()
+
+
+def test_set_metronome_sends_only_provided_keys(engine_server: _Engine) -> None:
+    controller = _controller(engine_server)
+
+    controller.set_metronome(enabled=True)
+    assert engine_server.state.requests[-1]["params"] == {"enabled": True}
+
+    controller.set_metronome(bpm=96.0)
+    assert engine_server.state.requests[-1]["params"] == {"bpm": 96.0}
+
+    controller.shutdown()
+
+
+def test_set_metronome_requires_a_field(engine_server: _Engine) -> None:
+    controller = _controller(engine_server)
+
+    with pytest.raises(ValueError):
+        controller.set_metronome()
+
+    controller.shutdown()
+
+
+def test_start_and_stop_recording(engine_server: _Engine) -> None:
+    controller = _controller(engine_server)
+
+    assert controller.start_recording("take.wav")["record_path"] == "take.wav"
+    assert engine_server.state.requests[-1]["params"] == {"path": "take.wav"}
+
+    assert controller.stop_recording()["recording"] is False
+    assert engine_server.state.requests[-1]["method"] == "stop_recording"
 
     controller.shutdown()
 

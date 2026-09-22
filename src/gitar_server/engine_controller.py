@@ -177,3 +177,21 @@ class EngineController:
 
     def load_cab(self, path: str) -> dict[str, object]:
         return self._ready_client().call("load_cab", {"path": path})
+
+    def set_metronome(
+        self, *, enabled: bool | None = None, bpm: float | None = None
+    ) -> dict[str, object]:
+        params: dict[str, object] = {}
+        if enabled is not None:
+            params["enabled"] = enabled
+        if bpm is not None:
+            params["bpm"] = bpm
+        if not params:
+            raise ValueError("set_metronome requires enabled or bpm")
+        return self._ready_client().call("set_metronome", params)
+
+    def start_recording(self, path: str) -> dict[str, object]:
+        return self._ready_client().call("start_recording", {"path": path})
+
+    def stop_recording(self) -> dict[str, object]:
+        return self._ready_client().call("stop_recording")

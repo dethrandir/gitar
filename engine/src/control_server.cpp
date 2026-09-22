@@ -129,6 +129,12 @@ json engine_status(Engine& engine) {
         {"eq_low_db", engine.eq_low_db()},
         {"eq_mid_db", engine.eq_mid_db()},
         {"eq_high_db", engine.eq_high_db()},
+        {"recording", engine.recording()},
+        {"record_path", engine.recording_path()},
+        {"record_frames", engine.recorded_frames()},
+        {"record_dropped_frames", engine.dropped_record_frames()},
+        {"metronome_enabled", engine.metronome_enabled()},
+        {"metronome_bpm", engine.metronome_bpm()},
     };
 }
 
@@ -216,6 +222,20 @@ bool apply_start_params(const json& params, EngineConfig* config, std::string* e
             return false;
         }
         *eq_targets[i] = params[name].get<float>();
+    }
+    if (params.contains("metronome_enabled")) {
+        if (!params["metronome_enabled"].is_boolean()) {
+            set_error(error, "metronome_enabled must be a boolean");
+            return false;
+        }
+        config->metronome_enabled = params["metronome_enabled"].get<bool>();
+    }
+    if (params.contains("metronome_bpm")) {
+        if (!params["metronome_bpm"].is_number()) {
+            set_error(error, "metronome_bpm must be a number");
+            return false;
+        }
+        config->metronome_bpm = params["metronome_bpm"].get<float>();
     }
     return true;
 }
@@ -411,6 +431,52 @@ std::string ControlServer::Impl::process_line(const std::string& line) {
         const float mid = has_mid ? params["mid_db"].get<float>() : engine->eq_mid_db();
         const float high = has_high ? params["high_db"].get<float>() : engine->eq_high_db();
         engine->set_eq(low, mid, high);
+        return success(id, engine_status(*engine)).dump();
+    }
+    if (method == "start_recording") {
+        if (!params.is_object() || !params.contains("path") || !params["path"].is_string()) {
+            return failure(id, -32602, "invalid params: path is required").dump();
+        }
+        const std::string path = params["path"].get<std::string>();
+        std::string record_error;
+        bool started = false;
+        {
+            std::lock_guard<std::mutex> lock(engine_mutex);
+            started = engine->start_recording(path, &record_error);
+        }
+        if (!started) {
+            return failure(id, -32000,
+                           record_error.empty() ? "failed to start recording" : record_error)
+                .dump();
+        }
+        std::lock_guard<std::mutex> lock(engine_mutex);
+        return success(id, engine_status(*engine)).dump();
+    }
+    if (method == "stop_recording") {
+        std::lock_guard<std::mutex> lock(engine_mutex);
+        engine->stop_recording();
+        return success(id, engine_status(*engine)).dump();
+    }
+    if (method == "set_metronome") {
+        if (!params.is_object()) {
+            return failure(id, -32602, "invalid params").dump();
+        }
+        const bool has_enabled = params.contains("enabled");
+        const bool has_bpm = params.contains("bpm");
+        if (!has_enabled && !has_bpm) {
+            return failure(id, -32602, "invalid params: enabled or bpm is required").dump();
+        }
+        if (has_enabled && !params["enabled"].is_boolean()) {
+            return failure(id, -32602, "invalid params: enabled must be a boolean").dump();
+        }
+        if (has_bpm && !params["bpm"].is_number()) {
+            return failure(id, -32602, "invalid params: bpm must be a number").dump();
+        }
+        std::lock_guard<std::mutex> lock(engine_mutex);
+        const bool enabled =
+            has_enabled ? params["enabled"].get<bool>() : engine->metronome_enabled();
+        const float bpm = has_bpm ? params["bpm"].get<float>() : engine->metronome_bpm();
+        engine->set_metronome(enabled, bpm);
         return success(id, engine_status(*engine)).dump();
     }
     if (method == "start") {

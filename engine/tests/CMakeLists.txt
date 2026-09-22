@@ -11,7 +11,9 @@ add_executable(gitar_engine_tests
     test_engine.cpp
     test_control_server.cpp
     test_cli.cpp
-    test_neural_model.cpp)
+    test_neural_model.cpp
+    test_recorder.cpp
+    test_metronome.cpp)
 target_link_libraries(gitar_engine_tests PRIVATE gitar_engine gitar_doctest gitar_json)
 target_compile_definitions(gitar_engine_tests PRIVATE
     GITAR_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")

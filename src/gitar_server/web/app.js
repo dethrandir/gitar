@@ -50,6 +50,12 @@
     engineLoadPreset: document.getElementById("engine-load-preset"),
     engineSavePreset: document.getElementById("engine-save-preset"),
     engineDeletePreset: document.getElementById("engine-delete-preset"),
+    engineMetronomeEnabled: document.getElementById("engine-metronome-enabled"),
+    engineMetronomeBpm: document.getElementById("engine-metronome-bpm"),
+    engineRecordName: document.getElementById("engine-record-name"),
+    engineRecordStart: document.getElementById("engine-record-start"),
+    engineRecordStop: document.getElementById("engine-record-stop"),
+    engineRecordStatus: document.getElementById("engine-record-status"),
     engineInputBar: document.getElementById("engine-input-bar"),
     engineOutputBar: document.getElementById("engine-output-bar"),
     engineInputPeak: document.getElementById("engine-input-peak"),
@@ -68,6 +74,7 @@
     wsOnline: false,
     engineAvailable: true,
     engineRunning: false,
+    engineRecording: false,
     eqDragging: false,
     spectrumFills: [],
   };
@@ -385,6 +392,11 @@
     elements.engineLoadPreset.disabled = !available;
     elements.engineSavePreset.disabled = !available;
     elements.engineDeletePreset.disabled = !available;
+    elements.engineMetronomeEnabled.disabled = !available;
+    elements.engineMetronomeBpm.disabled = !available;
+    elements.engineRecordName.disabled = !available;
+    elements.engineRecordStart.disabled = !available || state.engineRecording;
+    elements.engineRecordStop.disabled = !available || !state.engineRecording;
     elements.engineHint.hidden = available;
   }
 
@@ -443,6 +455,22 @@
     elements.engineOutputPeak.textContent = formatPeak(status.output_peak_db);
     elements.engineInputBar.style.width = `${levelPercent(status.input_peak_db)}%`;
     elements.engineOutputBar.style.width = `${levelPercent(status.output_peak_db)}%`;
+  }
+
+  function renderRecordStatus(status) {
+    const recording = Boolean(status && status.recording);
+    const path =
+      status && typeof status.record_path === "string" && status.record_path
+        ? status.record_path
+        : "";
+    if (recording) {
+      const frames = typeof status.record_frames === "number" ? status.record_frames : 0;
+      elements.engineRecordStatus.textContent = `recording · ${frames} frames · ${path || "…"}`;
+      elements.engineRecordStatus.dataset.state = "active";
+      return;
+    }
+    elements.engineRecordStatus.textContent = path ? `stopped · ${path}` : "idle";
+    elements.engineRecordStatus.dataset.state = "idle";
   }
 
   function hzToNote(hz, a4 = 440) {
@@ -508,14 +536,25 @@
   function renderEngineStatus(status) {
     state.engineAvailable = true;
     state.engineRunning = Boolean(status.running);
+    state.engineRecording = Boolean(status.recording);
     applyEngineControls();
     renderEngineDetails(status);
     renderEngineLevels(status);
     renderTuner(status);
     renderSpectrum(status);
+    renderRecordStatus(status);
     if (typeof status.gain === "number") {
       elements.engineGain.value = String(status.gain);
       renderGainValue(status.gain);
+    }
+    if (typeof status.metronome_enabled === "boolean") {
+      elements.engineMetronomeEnabled.checked = status.metronome_enabled;
+    }
+    if (
+      typeof status.metronome_bpm === "number" &&
+      document.activeElement !== elements.engineMetronomeBpm
+    ) {
+      elements.engineMetronomeBpm.value = String(status.metronome_bpm);
     }
     if (typeof status.gate_enabled === "boolean") {
       elements.engineGateEnabled.checked = status.gate_enabled;
@@ -544,6 +583,7 @@
   function renderEngineOffline() {
     state.engineAvailable = false;
     state.engineRunning = false;
+    state.engineRecording = false;
     applyEngineControls();
     elements.engineDetails.replaceChildren();
     elements.engineInputBar.style.width = "0%";
@@ -552,6 +592,7 @@
     elements.engineOutputPeak.textContent = "—";
     renderTuner(null);
     renderSpectrum(null);
+    renderRecordStatus(null);
   }
 
   async function refreshEngineStatus() {
@@ -634,6 +675,8 @@
           gain: Number(elements.engineGain.value),
           gate_enabled: elements.engineGateEnabled.checked,
           gate_threshold_db: Number(elements.engineGateThreshold.value),
+          metronome_enabled: elements.engineMetronomeEnabled.checked,
+          metronome_bpm: Number(elements.engineMetronomeBpm.value),
         },
       });
       renderEngineStatus(status);
@@ -747,6 +790,40 @@
     try {
       renderEngineStatus(await api("/api/engine/cab", { method: "POST", body: { path: "" } }));
       flash("Cabinet cleared.", "info");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function setEngineMetronome() {
+    try {
+      const status = await api("/api/engine/metronome", {
+        method: "POST",
+        body: {
+          enabled: elements.engineMetronomeEnabled.checked,
+          bpm: Number(elements.engineMetronomeBpm.value),
+        },
+      });
+      renderEngineStatus(status);
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function startEngineRecord() {
+    const path = elements.engineRecordName.value.trim() || "recording.wav";
+    try {
+      renderEngineStatus(await api("/api/engine/record", { method: "POST", body: { path } }));
+      flash(`Recording to ${path}.`, "info");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function stopEngineRecord() {
+    try {
+      renderEngineStatus(await api("/api/engine/record", { method: "POST", body: {} }));
+      flash("Recording stopped.", "info");
     } catch (error) {
       showError(error);
     }
@@ -922,6 +999,11 @@
     elements.engineLoadPreset.addEventListener("click", loadPreset);
     elements.engineSavePreset.addEventListener("click", savePreset);
     elements.engineDeletePreset.addEventListener("click", deletePreset);
+
+    elements.engineMetronomeEnabled.addEventListener("change", setEngineMetronome);
+    elements.engineMetronomeBpm.addEventListener("change", setEngineMetronome);
+    elements.engineRecordStart.addEventListener("click", startEngineRecord);
+    elements.engineRecordStop.addEventListener("click", stopEngineRecord);
 
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {

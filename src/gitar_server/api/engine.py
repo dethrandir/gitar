@@ -33,6 +33,8 @@ class StartRequest(BaseModel):
     model_path: str | None = None
     gate_enabled: bool | None = None
     gate_threshold_db: float | None = None
+    metronome_enabled: bool | None = None
+    metronome_bpm: float | None = None
 
 
 class ModelRequest(BaseModel):
@@ -55,6 +57,15 @@ class EqRequest(BaseModel):
 
 
 class CabRequest(BaseModel):
+    path: str = ""
+
+
+class MetronomeRequest(BaseModel):
+    enabled: bool | None = None
+    bpm: float | None = None
+
+
+class RecordRequest(BaseModel):
     path: str = ""
 
 
@@ -131,3 +142,17 @@ def engine_eq(request: EqRequest, engine: EngineDep) -> dict[str, object]:
 @router.post("/engine/cab")
 def engine_cab(request: CabRequest, engine: EngineDep) -> dict[str, object]:
     return engine.load_cab(request.path)
+
+
+@router.post("/engine/metronome")
+def engine_metronome(request: MetronomeRequest, engine: EngineDep) -> dict[str, object]:
+    if request.enabled is None and request.bpm is None:
+        raise HTTPException(status_code=422, detail="enabled or bpm is required")
+    return engine.set_metronome(enabled=request.enabled, bpm=request.bpm)
+
+
+@router.post("/engine/record")
+def engine_record(request: RecordRequest, engine: EngineDep) -> dict[str, object]:
+    if not request.path or request.path == "stop":
+        return engine.stop_recording()
+    return engine.start_recording(request.path)
