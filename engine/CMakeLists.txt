@@ -35,6 +35,14 @@ add_library(gitar_doctest INTERFACE)
 target_include_directories(gitar_doctest SYSTEM INTERFACE
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 
+# `third_party` is the include root so the control server uses
+# `#include "nlohmann/json.hpp"`.
+add_library(gitar_json INTERFACE)
+target_include_directories(gitar_json SYSTEM INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+
+find_package(Threads REQUIRED)
+
 set(GITAR_AUDIO_BACKEND_LIBS "")
 
 # miniaudio probes every backend it was built for at compile time. Disable the
@@ -77,6 +85,7 @@ target_include_directories(gitar_engine PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
     "$<INSTALL_INTERFACE:include>")
 target_link_libraries(gitar_engine PUBLIC gitar_miniaudio ${GITAR_AUDIO_BACKEND_LIBS})
+target_link_libraries(gitar_engine PRIVATE gitar_json Threads::Threads)
 gitar_set_warnings(gitar_engine)
 
 if(GITAR_BUILD_TESTS)
