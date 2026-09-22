@@ -406,7 +406,7 @@ void ControlServer::Impl::run() {
         }
 
         sockaddr_in address{};
-        socklen_type address_length = sizeof(address);
+        socklen_type address_length = static_cast<socklen_type>(sizeof(address));
         const socket_t client_socket =
             ::accept(listening, reinterpret_cast<sockaddr*>(&address), &address_length);
         if (client_socket == kInvalidSocket) {
@@ -456,7 +456,7 @@ bool ControlServer::start(const std::string& host, std::uint16_t port, std::stri
 
     const int reuse = 1;
     ::setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse),
-                 sizeof(reuse));
+                 static_cast<socklen_type>(sizeof(reuse)));
 
     sockaddr_in address{};
     address.sin_family = AF_INET;
@@ -467,7 +467,8 @@ bool ControlServer::start(const std::string& host, std::uint16_t port, std::stri
         return false;
     }
 
-    if (::bind(listener, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0) {
+    if (::bind(listener, reinterpret_cast<sockaddr*>(&address),
+               static_cast<socklen_type>(sizeof(address))) != 0) {
         set_error(error, "failed to bind " + host + ":" + std::to_string(port));
         close_socket(listener);
         return false;
@@ -479,7 +480,7 @@ bool ControlServer::start(const std::string& host, std::uint16_t port, std::stri
     }
 
     sockaddr_in bound{};
-    socklen_type bound_length = sizeof(bound);
+    socklen_type bound_length = static_cast<socklen_type>(sizeof(bound));
     if (::getsockname(listener, reinterpret_cast<sockaddr*>(&bound), &bound_length) == 0) {
         impl_->bound_port = ntohs(bound.sin_port);
     } else {

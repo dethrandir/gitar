@@ -1,8 +1,16 @@
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+#endif
 
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +26,32 @@ namespace {
 
 using json = nlohmann::json;
 
+#ifdef _WIN32
+using socket_t = SOCKET;
+constexpr socket_t kInvalidSocket = INVALID_SOCKET;
+
+// Socket calls need Winsock initialized in this translation unit too, not just
+// inside the control server, because the tests open their own client sockets.
+struct WinsockInitializer {
+    WinsockInitializer() {
+        WSADATA data;
+        WSAStartup(MAKEWORD(2, 2), &data);
+    }
+};
+[[maybe_unused]] const WinsockInitializer g_winsock_initializer;
+
+void close_socket(socket_t socket) {
+    ::closesocket(socket);
+}
+#else
+using socket_t = int;
+constexpr socket_t kInvalidSocket = -1;
+
+void close_socket(socket_t socket) {
+    ::close(socket);
+}
+#endif
+
 std::string fixture_path(const char* name) {
     return (std::filesystem::path(GITAR_TEST_FIXTURES_DIR) / name).string();
 }
@@ -25,21 +59,23 @@ std::string fixture_path(const char* name) {
 class LoopbackClient {
    public:
     explicit LoopbackClient(std::uint16_t port) : fd_(::socket(AF_INET, SOCK_STREAM, 0)) {
-        REQUIRE(fd_ >= 0);
+        REQUIRE(fd_ != kInvalidSocket);
         timeval timeout{};
         timeout.tv_sec = 5;
-        ::setsockopt(fd_, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        ::setsockopt(fd_, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout),
+                     static_cast<int>(sizeof(timeout)));
 
         sockaddr_in address{};
         address.sin_family = AF_INET;
         address.sin_port = htons(port);
         REQUIRE(::inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1);
-        REQUIRE(::connect(fd_, reinterpret_cast<sockaddr*>(&address), sizeof(address)) == 0);
+        REQUIRE(::connect(fd_, reinterpret_cast<sockaddr*>(&address),
+                          static_cast<int>(sizeof(address))) == 0);
     }
 
     ~LoopbackClient() {
-        if (fd_ >= 0) {
-            ::close(fd_);
+        if (fd_ != kInvalidSocket) {
+            close_socket(fd_);
         }
     }
 
@@ -50,7 +86,8 @@ class LoopbackClient {
         const std::string payload = line + "\n";
         std::size_t sent = 0;
         while (sent < payload.size()) {
-            const auto written = ::send(fd_, payload.data() + sent, payload.size() - sent, 0);
+            const auto written =
+                ::send(fd_, payload.data() + sent, static_cast<int>(payload.size() - sent), 0);
             REQUIRE(written > 0);
             sent += static_cast<std::size_t>(written);
         }
@@ -60,7 +97,7 @@ class LoopbackClient {
         std::size_t newline = std::string::npos;
         while ((newline = buffer_.find('\n')) == std::string::npos) {
             char chunk[1024];
-            const auto received = ::recv(fd_, chunk, sizeof(chunk), 0);
+            const auto received = ::recv(fd_, chunk, static_cast<int>(sizeof(chunk)), 0);
             REQUIRE(received > 0);
             buffer_.append(chunk, static_cast<std::size_t>(received));
         }
@@ -75,7 +112,7 @@ class LoopbackClient {
     }
 
    private:
-    int fd_ = -1;
+    socket_t fd_ = kInvalidSocket;
     std::string buffer_;
 };
 
@@ -285,13 +322,14 @@ TEST_CASE("the server is unreachable after stop") {
 
     server.stop();
 
-    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
-    REQUIRE(fd >= 0);
+    const socket_t fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    REQUIRE(fd != kInvalidSocket);
     sockaddr_in address{};
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     REQUIRE(::inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1);
-    const int result = ::connect(fd, reinterpret_cast<sockaddr*>(&address), sizeof(address));
-    ::close(fd);
+    const int result =
+        ::connect(fd, reinterpret_cast<sockaddr*>(&address), static_cast<int>(sizeof(address)));
+    close_socket(fd);
     CHECK(result != 0);
 }
