@@ -193,6 +193,26 @@ See [`AGENTS.md`](AGENTS.md) for the build/test commands and
 
 ### Running the v2 engine and web UI (Linux, in progress)
 
+The quick path is `./run.sh`. It builds the engine if needed, sets up `.venv` if
+needed, and starts the web UI:
+
+```sh
+./run.sh                 # build + serve and open the browser
+./run.sh --no-open       # don't open a browser
+./run.sh --no-engine     # use an existing engine/build/gitar-engine
+./run.sh --rebuild       # clean rebuild of the engine
+./run.sh -- --port 8080  # extra args after -- go to 'gitard serve'
+```
+
+On Windows, `scripts/run.ps1` does the same (PowerShell 5.1+):
+
+```powershell
+./scripts/run.ps1
+./scripts/run.ps1 -NoOpen -- --port 8080
+```
+
+The manual steps, if you prefer them:
+
 ```sh
 # 1. Build the native engine (downloads pinned Eigen + NAM on first configure)
 cmake -S engine -B engine/build -G Ninja -DCMAKE_BUILD_TYPE=Release

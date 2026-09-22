@@ -23,7 +23,7 @@ jobs:
       - name: shellcheck
         run: |
           set -eu
-          shellcheck install.sh uninstall.sh gitar
+          shellcheck install.sh uninstall.sh gitar run.sh
           if compgen -G "scripts/*.sh" > /dev/null; then
             shellcheck scripts/*.sh
           fi
@@ -44,6 +44,13 @@ jobs:
         shell: pwsh
         run: |
           $f = "scripts/uninstall.ps1"
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile($f, [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors; exit 1 }
+      - name: Parse run.ps1
+        shell: pwsh
+        run: |
+          $f = "scripts/run.ps1"
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile($f, [ref]$null, [ref]$errors) | Out-Null
           if ($errors) { $errors; exit 1 }
