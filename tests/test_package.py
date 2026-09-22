@@ -14,4 +14,4 @@ def test_version_is_non_empty_semver_prefix() -> None:
 
 
 def test_main_returns_zero() -> None:
-    assert main() == 0
+    assert main(["version"]) == 0
