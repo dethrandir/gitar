@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
 from gitar_server.engine_controller import EngineController
-from gitar_server.models import ModelInfo, scan_models
+from gitar_server.models import ModelInfo, scan_cabs, scan_models
 
 router = APIRouter(prefix="/api", tags=["engine"])
 
@@ -48,6 +48,16 @@ class GateRequest(BaseModel):
     threshold_db: float | None = None
 
 
+class EqRequest(BaseModel):
+    low_db: float | None = None
+    mid_db: float | None = None
+    high_db: float | None = None
+
+
+class CabRequest(BaseModel):
+    path: str = ""
+
+
 def _model_payload(model: ModelInfo) -> dict[str, object]:
     return {
         "name": model.name,
@@ -61,6 +71,11 @@ def _model_payload(model: ModelInfo) -> dict[str, object]:
 @router.get("/models")
 def list_models() -> dict[str, list[dict[str, object]]]:
     return {"models": [_model_payload(model) for model in scan_models()]}
+
+
+@router.get("/cabs")
+def list_cabs() -> dict[str, list[dict[str, object]]]:
+    return {"cabs": scan_cabs()}
 
 
 @router.get("/engine/devices")
@@ -104,3 +119,15 @@ def engine_gate(request: GateRequest, engine: EngineDep) -> dict[str, object]:
     if request.enabled is None and request.threshold_db is None:
         raise HTTPException(status_code=422, detail="enabled or threshold_db is required")
     return engine.set_gate(enabled=request.enabled, threshold_db=request.threshold_db)
+
+
+@router.post("/engine/eq")
+def engine_eq(request: EqRequest, engine: EngineDep) -> dict[str, object]:
+    if request.low_db is None and request.mid_db is None and request.high_db is None:
+        raise HTTPException(status_code=422, detail="low_db, mid_db or high_db is required")
+    return engine.set_eq(low_db=request.low_db, mid_db=request.mid_db, high_db=request.high_db)
+
+
+@router.post("/engine/cab")
+def engine_cab(request: CabRequest, engine: EngineDep) -> dict[str, object]:
+    return engine.load_cab(request.path)

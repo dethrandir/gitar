@@ -56,6 +56,10 @@ class _State:
             return {"running": True, "model_path": ""}
         if method == "set_gate":
             return {"running": True, "gate": params}
+        if method == "set_eq":
+            return {"running": True, "eq": params}
+        if method == "load_cab":
+            return {"running": True, "cab_ir_path": params.get("path")}
         return {"ok": True}
 
 
@@ -197,6 +201,39 @@ def test_set_gate_requires_a_field(engine_server: _Engine) -> None:
 
     with pytest.raises(ValueError):
         controller.set_gate()
+
+    controller.shutdown()
+
+
+def test_set_eq_sends_only_provided_keys(engine_server: _Engine) -> None:
+    controller = _controller(engine_server)
+
+    controller.set_eq(low_db=3.0)
+    assert engine_server.state.requests[-1]["params"] == {"low_db": 3.0}
+
+    controller.set_eq(mid_db=-2.5, high_db=6.0)
+    assert engine_server.state.requests[-1]["params"] == {"mid_db": -2.5, "high_db": 6.0}
+
+    controller.shutdown()
+
+
+def test_set_eq_requires_a_field(engine_server: _Engine) -> None:
+    controller = _controller(engine_server)
+
+    with pytest.raises(ValueError):
+        controller.set_eq()
+
+    controller.shutdown()
+
+
+def test_load_cab_sends_path(engine_server: _Engine) -> None:
+    controller = _controller(engine_server)
+
+    assert controller.load_cab("/cabs/marshal.wav")["cab_ir_path"] == "/cabs/marshal.wav"
+    assert engine_server.state.requests[-1]["params"] == {"path": "/cabs/marshal.wav"}
+
+    assert controller.load_cab("")["cab_ir_path"] == ""
+    assert engine_server.state.requests[-1]["params"] == {"path": ""}
 
     controller.shutdown()
 

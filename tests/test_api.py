@@ -292,6 +292,20 @@ class _FakeEngine:
         self.calls.append(("set_gate", (enabled, threshold_db)))
         return self._result()
 
+    def set_eq(
+        self,
+        *,
+        low_db: float | None = None,
+        mid_db: float | None = None,
+        high_db: float | None = None,
+    ) -> dict[str, object]:
+        self.calls.append(("set_eq", (low_db, mid_db, high_db)))
+        return self._result()
+
+    def load_cab(self, path: str) -> dict[str, object]:
+        self.calls.append(("load_cab", path))
+        return self._result()
+
     def shutdown(self) -> None:
         self.shutdown_calls += 1
 
@@ -333,6 +347,26 @@ def test_models_lists_scanned_models(
                 "size_bytes": 1234,
             }
         ]
+    }
+
+
+def test_cabs_lists_scanned_cabs(
+    engine_app: tuple[TestClient, _FakeEngine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, _ = engine_app
+    monkeypatch.setattr(
+        engine_module,
+        "scan_cabs",
+        lambda directory=None: [
+            {"name": "marshal", "path": "/cabs/marshal.wav", "size_bytes": 1024}
+        ],
+    )
+
+    response = client.get("/api/cabs")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "cabs": [{"name": "marshal", "path": "/cabs/marshal.wav", "size_bytes": 1024}]
     }
 
 
@@ -453,6 +487,51 @@ def test_engine_gate_forwards_fields(engine_app: tuple[TestClient, _FakeEngine])
 
     assert response.status_code == 200
     assert fake.calls[-1] == ("set_gate", (True, -30.0))
+
+
+def test_engine_eq_requires_a_field(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, _ = engine_app
+
+    response = client.post("/api/engine/eq", json={})
+
+    assert response.status_code == 422
+
+
+def test_engine_eq_forwards_fields(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/eq", json={"low_db": 3.0, "high_db": -4.5})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("set_eq", (3.0, None, -4.5))
+
+
+def test_engine_cab_loads_path(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/cab", json={"path": "/cabs/marshal.wav"})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("load_cab", "/cabs/marshal.wav")
+
+
+def test_engine_cab_empty_path_clears(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+
+    response = client.post("/api/engine/cab", json={"path": ""})
+
+    assert response.status_code == 200
+    assert fake.calls[-1] == ("load_cab", "")
+
+
+def test_engine_eq_error_maps_to_conflict(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+    fake.error = EngineError(-32000, "boom")
+
+    response = client.post("/api/engine/eq", json={"low_db": 1.0})
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "engine error -32000: boom"
 
 
 def test_engine_error_maps_to_conflict(engine_app: tuple[TestClient, _FakeEngine]) -> None:

@@ -8,7 +8,14 @@ from pathlib import Path
 import pytest
 
 from gitar_server.config import config_dir
-from gitar_server.models import ModelInfo, models_dir, parse_nam_metadata, scan_models
+from gitar_server.models import (
+    ModelInfo,
+    cabs_dir,
+    models_dir,
+    parse_nam_metadata,
+    scan_cabs,
+    scan_models,
+)
 
 
 def _nam(**overrides: object) -> str:
@@ -100,3 +107,46 @@ def test_models_dir_defaults_under_config_dir(
     monkeypatch.setenv("GITAR_CONFIG_DIR", str(tmp_path))
 
     assert models_dir() == config_dir() / "models"
+
+
+def test_cabs_dir_honors_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITAR_CABS_DIR", str(tmp_path))
+
+    assert cabs_dir() == tmp_path
+
+
+def test_cabs_dir_defaults_under_config_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("GITAR_CABS_DIR", raising=False)
+    monkeypatch.setenv("GITAR_CONFIG_DIR", str(tmp_path))
+
+    assert cabs_dir() == config_dir() / "cabs"
+
+
+def test_scan_cabs_sorted_ignores_non_wav(tmp_path: Path) -> None:
+    (tmp_path / "b.wav").write_bytes(b"b" * 8)
+    (tmp_path / "a.wav").write_bytes(b"a" * 4)
+    (tmp_path / "notes.txt").write_text("ignore me", encoding="utf-8")
+    (tmp_path / "impulse.nam").write_text("{}", encoding="utf-8")
+
+    found = scan_cabs(tmp_path)
+
+    assert [cab["name"] for cab in found] == ["a", "b"]
+    assert found[0] == {
+        "name": "a",
+        "path": str(tmp_path / "a.wav"),
+        "size_bytes": 4,
+    }
+    assert found[1]["size_bytes"] == 8
+
+
+def test_scan_cabs_missing_directory_returns_empty(tmp_path: Path) -> None:
+    assert scan_cabs(tmp_path / "nope") == []
+
+
+def test_scan_cabs_defaults_to_cabs_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "solo.wav").write_bytes(b"x")
+    monkeypatch.setenv("GITAR_CABS_DIR", str(tmp_path))
+
+    assert [cab["name"] for cab in scan_cabs()] == ["solo"]

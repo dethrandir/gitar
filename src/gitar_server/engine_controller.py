@@ -156,3 +156,24 @@ class EngineController:
         if not params:
             raise ValueError("set_gate requires enabled or threshold_db")
         return self._ready_client().call("set_gate", params)
+
+    def set_eq(
+        self,
+        *,
+        low_db: float | None = None,
+        mid_db: float | None = None,
+        high_db: float | None = None,
+    ) -> dict[str, object]:
+        params: dict[str, object] = {}
+        if low_db is not None:
+            params["low_db"] = low_db
+        if mid_db is not None:
+            params["mid_db"] = mid_db
+        if high_db is not None:
+            params["high_db"] = high_db
+        if not params:
+            raise ValueError("set_eq requires low_db, mid_db or high_db")
+        return self._ready_client().call("set_eq", params)
+
+    def load_cab(self, path: str) -> dict[str, object]:
+        return self._ready_client().call("load_cab", {"path": path})

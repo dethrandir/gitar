@@ -33,6 +33,28 @@ def models_dir() -> Path:
     return config_dir() / "models"
 
 
+def cabs_dir() -> Path:
+    override = os.environ.get("GITAR_CABS_DIR")
+    if override:
+        return Path(override)
+    return config_dir() / "cabs"
+
+
+def scan_cabs(directory: Path | None = None) -> list[dict[str, object]]:
+    root = directory if directory is not None else cabs_dir()
+    if not root.is_dir():
+        return []
+
+    found: list[dict[str, object]] = []
+    for entry in sorted(root.glob("*.wav"), key=lambda path: path.name):
+        try:
+            size_bytes = entry.stat().st_size
+        except OSError:
+            continue
+        found.append({"name": entry.stem, "path": str(entry), "size_bytes": size_bytes})
+    return found
+
+
 def parse_nam_metadata(text: str) -> dict[str, object]:
     try:
         data = json.loads(text)

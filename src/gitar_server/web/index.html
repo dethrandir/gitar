@@ -142,6 +142,39 @@
           />
         </div>
 
+        <div class="field">
+          <label>EQ</label>
+          <div class="eq-controls">
+            <div class="eq-control">
+              <label for="engine-eq-low">
+                Low <output id="engine-eq-low-value" for="engine-eq-low">0.0 dB</output>
+              </label>
+              <input id="engine-eq-low" type="range" min="-24" max="24" step="0.5" value="0" />
+            </div>
+            <div class="eq-control">
+              <label for="engine-eq-mid">
+                Mid <output id="engine-eq-mid-value" for="engine-eq-mid">0.0 dB</output>
+              </label>
+              <input id="engine-eq-mid" type="range" min="-24" max="24" step="0.5" value="0" />
+            </div>
+            <div class="eq-control">
+              <label for="engine-eq-high">
+                High <output id="engine-eq-high-value" for="engine-eq-high">0.0 dB</output>
+              </label>
+              <input id="engine-eq-high" type="range" min="-24" max="24" step="0.5" value="0" />
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="engine-cab">Cabinet</label>
+          <div class="row">
+            <select id="engine-cab"></select>
+            <button type="button" id="engine-load-cab">Load</button>
+            <button type="button" id="engine-clear-cab" class="ghost">Clear</button>
+          </div>
+        </div>
+
         <div class="levels">
           <div class="level-row">
             <span class="level-label">In</span>

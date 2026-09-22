@@ -37,6 +37,15 @@
     engineGateEnabled: document.getElementById("engine-gate-enabled"),
     engineGateThreshold: document.getElementById("engine-gate-threshold"),
     engineGateValue: document.getElementById("engine-gate-value"),
+    engineEqLow: document.getElementById("engine-eq-low"),
+    engineEqMid: document.getElementById("engine-eq-mid"),
+    engineEqHigh: document.getElementById("engine-eq-high"),
+    engineEqLowValue: document.getElementById("engine-eq-low-value"),
+    engineEqMidValue: document.getElementById("engine-eq-mid-value"),
+    engineEqHighValue: document.getElementById("engine-eq-high-value"),
+    engineCab: document.getElementById("engine-cab"),
+    engineLoadCab: document.getElementById("engine-load-cab"),
+    engineClearCab: document.getElementById("engine-clear-cab"),
     engineInputBar: document.getElementById("engine-input-bar"),
     engineOutputBar: document.getElementById("engine-output-bar"),
     engineInputPeak: document.getElementById("engine-input-peak"),
@@ -49,16 +58,19 @@
     wsOnline: false,
     engineAvailable: true,
     engineRunning: false,
+    eqDragging: false,
   };
 
   const ENGINE_POLL_MS = 500;
   const LEVEL_MIN_DB = -60;
+  const EQ_DEBOUNCE_MS = 200;
 
   let flashTimer = null;
   let socket = null;
   let reconnectTimer = null;
   let reconnectAttempts = 0;
   let engineTimer = null;
+  let eqTimer = null;
 
   async function api(path, options = {}) {
     const { method = "GET", body } = options;
@@ -347,6 +359,12 @@
     elements.engineGain.disabled = !available;
     elements.engineGateEnabled.disabled = !available;
     elements.engineGateThreshold.disabled = !available;
+    elements.engineEqLow.disabled = !available;
+    elements.engineEqMid.disabled = !available;
+    elements.engineEqHigh.disabled = !available;
+    elements.engineCab.disabled = !available;
+    elements.engineLoadCab.disabled = !available;
+    elements.engineClearCab.disabled = !available;
     elements.engineHint.hidden = available;
   }
 
@@ -358,6 +376,21 @@
     elements.engineGateValue.textContent = `${formatDecimal(threshold, 0)} dB`;
   }
 
+  function renderEqValues() {
+    elements.engineEqLowValue.textContent = `${formatDecimal(Number(elements.engineEqLow.value), 1)} dB`;
+    elements.engineEqMidValue.textContent = `${formatDecimal(Number(elements.engineEqMid.value), 1)} dB`;
+    elements.engineEqHighValue.textContent = `${formatDecimal(Number(elements.engineEqHigh.value), 1)} dB`;
+  }
+
+  function eqBusy() {
+    return (
+      state.eqDragging ||
+      document.activeElement === elements.engineEqLow ||
+      document.activeElement === elements.engineEqMid ||
+      document.activeElement === elements.engineEqHigh
+    );
+  }
+
   function renderEngineDetails(status) {
     const details = elements.engineDetails;
     details.replaceChildren();
@@ -366,6 +399,11 @@
       details,
       "model",
       status.model_loaded ? String(status.model_path || "loaded") : "none",
+    );
+    appendDefinition(
+      details,
+      "cabinet",
+      status.cab_ir_loaded ? String(status.cab_ir_path || "loaded") : "none",
     );
     appendDefinition(details, "latency", `${formatDecimal(status.latency_ms, 1)} ms`);
     appendDefinition(details, "sample_rate", formatSampleRate(status.sample_rate));
@@ -403,6 +441,21 @@
     if (typeof status.gate_threshold_db === "number") {
       elements.engineGateThreshold.value = String(status.gate_threshold_db);
       renderGateValue(status.gate_threshold_db);
+    }
+    if (!eqBusy()) {
+      if (typeof status.eq_low_db === "number") {
+        elements.engineEqLow.value = String(status.eq_low_db);
+      }
+      if (typeof status.eq_mid_db === "number") {
+        elements.engineEqMid.value = String(status.eq_mid_db);
+      }
+      if (typeof status.eq_high_db === "number") {
+        elements.engineEqHigh.value = String(status.eq_high_db);
+      }
+      renderEqValues();
+    }
+    if (status.cab_ir_loaded && typeof status.cab_ir_path === "string" && status.cab_ir_path) {
+      setSelectValue(elements.engineCab, status.cab_ir_path);
     }
   }
 
@@ -538,6 +591,60 @@
     }
   }
 
+  async function setEngineEq() {
+    try {
+      const status = await api("/api/engine/eq", {
+        method: "POST",
+        body: {
+          low_db: Number(elements.engineEqLow.value),
+          mid_db: Number(elements.engineEqMid.value),
+          high_db: Number(elements.engineEqHigh.value),
+        },
+      });
+      renderEngineStatus(status);
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  function scheduleEngineEq() {
+    window.clearTimeout(eqTimer);
+    eqTimer = window.setTimeout(setEngineEq, EQ_DEBOUNCE_MS);
+  }
+
+  async function loadCabs() {
+    try {
+      const body = await api("/api/cabs");
+      const options = body.cabs.map((cab) => ({ value: cab.path, label: cab.name }));
+      fillSelect(elements.engineCab, options, "— select cabinet —");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function loadEngineCab() {
+    const path = elements.engineCab.value;
+    if (!path) {
+      flash("Select a cabinet first.", "error");
+      return;
+    }
+    try {
+      renderEngineStatus(await api("/api/engine/cab", { method: "POST", body: { path } }));
+      flash("Cabinet loaded.", "info");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function clearEngineCab() {
+    try {
+      renderEngineStatus(await api("/api/engine/cab", { method: "POST", body: { path: "" } }));
+      flash("Cabinet cleared.", "info");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
   function connectWs() {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     socket = new WebSocket(`${protocol}://${window.location.host}/api/ws`);
@@ -608,6 +715,30 @@
     elements.engineGateThreshold.addEventListener("change", setEngineGate);
     elements.engineGateEnabled.addEventListener("change", setEngineGate);
 
+    for (const slider of [
+      elements.engineEqLow,
+      elements.engineEqMid,
+      elements.engineEqHigh,
+    ]) {
+      slider.addEventListener("pointerdown", () => {
+        state.eqDragging = true;
+      });
+      slider.addEventListener("input", () => {
+        renderEqValues();
+        scheduleEngineEq();
+      });
+      slider.addEventListener("change", () => {
+        window.clearTimeout(eqTimer);
+        setEngineEq();
+      });
+    }
+    window.addEventListener("pointerup", () => {
+      state.eqDragging = false;
+    });
+
+    elements.engineLoadCab.addEventListener("click", loadEngineCab);
+    elements.engineClearCab.addEventListener("click", clearEngineCab);
+
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         stopEnginePolling();
@@ -623,6 +754,7 @@
     elements.volumeValue.textContent = `${elements.volume.value}%`;
     renderGainValue(Number(elements.engineGain.value));
     renderGateValue(Number(elements.engineGateThreshold.value));
+    renderEqValues();
     connectWs();
     startEnginePolling();
     try {
@@ -633,6 +765,7 @@
     }
     await loadEngineDevices();
     await loadModels();
+    await loadCabs();
     await refreshStatus();
   }
 
