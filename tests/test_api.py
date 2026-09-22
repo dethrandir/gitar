@@ -245,6 +245,7 @@ class _FakeEngine:
         self.error: Exception | None = None
         self.calls: list[tuple[str, object]] = []
         self.status_payload: dict[str, object] = {"running": True, "gain": 1.0}
+        self.devices: list[dict[str, object]] = []
         self.shutdown_calls = 0
 
     def _result(self) -> dict[str, object]:
@@ -258,6 +259,12 @@ class _FakeEngine:
     def status(self) -> dict[str, object]:
         self.calls.append(("status", None))
         return self._result()
+
+    def list_devices(self) -> list[dict[str, object]]:
+        self.calls.append(("list_devices", None))
+        if self.error is not None:
+            raise self.error
+        return list(self.devices)
 
     def start(self, **params: object) -> dict[str, object]:
         self.calls.append(("start", params))
@@ -327,6 +334,35 @@ def test_models_lists_scanned_models(
             }
         ]
     }
+
+
+def test_engine_devices_returns_list(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+    fake.devices = [
+        {"name": "guitar", "is_input": True, "is_output": False, "is_default": True},
+        {"name": "headphones", "is_input": False, "is_output": True, "is_default": False},
+    ]
+
+    response = client.get("/api/engine/devices")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "devices": [
+            {"name": "guitar", "is_input": True, "is_output": False, "is_default": True},
+            {"name": "headphones", "is_input": False, "is_output": True, "is_default": False},
+        ]
+    }
+    assert fake.calls[-1] == ("list_devices", None)
+
+
+def test_engine_devices_unavailable_is_503(engine_app: tuple[TestClient, _FakeEngine]) -> None:
+    client, fake = engine_app
+    fake.available = False
+
+    response = client.get("/api/engine/devices")
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "gitar-engine binary not found"
 
 
 def test_engine_status_returns_status(engine_app: tuple[TestClient, _FakeEngine]) -> None:

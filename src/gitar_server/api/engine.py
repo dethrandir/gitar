@@ -63,6 +63,13 @@ def list_models() -> dict[str, list[dict[str, object]]]:
     return {"models": [_model_payload(model) for model in scan_models()]}
 
 
+@router.get("/engine/devices")
+def engine_devices(engine: EngineDep) -> dict[str, list[dict[str, object]]]:
+    if not engine.is_available():
+        raise HTTPException(status_code=503, detail="gitar-engine binary not found")
+    return {"devices": engine.list_devices()}
+
+
 @router.get("/engine/status")
 def engine_status(engine: EngineDep) -> dict[str, object]:
     if not engine.is_available():

@@ -127,6 +127,9 @@ class EngineController:
     def status(self) -> dict[str, object]:
         return self._ready_client().status()
 
+    def list_devices(self) -> list[dict[str, object]]:
+        return self._ready_client().list_devices()
+
     def start(self, **params: object) -> dict[str, object]:
         return self._ready_client().start(**params)
 

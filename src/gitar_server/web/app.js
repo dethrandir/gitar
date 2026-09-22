@@ -24,17 +24,41 @@
     meterPeak: document.getElementById("meter-peak"),
     meterAdvice: document.getElementById("meter-advice"),
     details: document.getElementById("details"),
+    engineHint: document.getElementById("engine-hint"),
+    engineInput: document.getElementById("engine-input"),
+    engineOutput: document.getElementById("engine-output"),
+    engineStart: document.getElementById("engine-start"),
+    engineStop: document.getElementById("engine-stop"),
+    engineModel: document.getElementById("engine-model"),
+    engineLoadModel: document.getElementById("engine-load-model"),
+    engineClearModel: document.getElementById("engine-clear-model"),
+    engineGain: document.getElementById("engine-gain"),
+    engineGainValue: document.getElementById("engine-gain-value"),
+    engineGateEnabled: document.getElementById("engine-gate-enabled"),
+    engineGateThreshold: document.getElementById("engine-gate-threshold"),
+    engineGateValue: document.getElementById("engine-gate-value"),
+    engineInputBar: document.getElementById("engine-input-bar"),
+    engineOutputBar: document.getElementById("engine-output-bar"),
+    engineInputPeak: document.getElementById("engine-input-peak"),
+    engineOutputPeak: document.getElementById("engine-output-peak"),
+    engineDetails: document.getElementById("engine-details"),
   };
 
   const state = {
     config: null,
     wsOnline: false,
+    engineAvailable: true,
+    engineRunning: false,
   };
+
+  const ENGINE_POLL_MS = 500;
+  const LEVEL_MIN_DB = -60;
 
   let flashTimer = null;
   let socket = null;
   let reconnectTimer = null;
   let reconnectAttempts = 0;
+  let engineTimer = null;
 
   async function api(path, options = {}) {
     const { method = "GET", body } = options;
@@ -170,12 +194,16 @@
     }
   }
 
-  function appendDetail(term, value) {
+  function appendDefinition(list, term, value) {
     const dt = document.createElement("dt");
     dt.textContent = term;
     const dd = document.createElement("dd");
     dd.textContent = value;
-    elements.details.append(dt, dd);
+    list.append(dt, dd);
+  }
+
+  function appendDetail(term, value) {
+    appendDefinition(elements.details, term, value);
   }
 
   function levelForAdvice(advice) {
@@ -272,6 +300,244 @@
     }
   }
 
+  function formatSampleRate(rate) {
+    if (typeof rate !== "number" || !rate) return "—";
+    const khz = rate / 1000;
+    return Number.isInteger(khz) ? `${khz} kHz` : `${khz.toFixed(1)} kHz`;
+  }
+
+  function formatDecimal(value, digits) {
+    return typeof value === "number" && Number.isFinite(value) ? value.toFixed(digits) : "—";
+  }
+
+  function formatPeak(db) {
+    return `${formatDecimal(db, 1)} dB`;
+  }
+
+  function levelPercent(db) {
+    if (typeof db !== "number" || !Number.isFinite(db)) return 0;
+    const clamped = Math.max(LEVEL_MIN_DB, Math.min(0, db));
+    return ((clamped - LEVEL_MIN_DB) / -LEVEL_MIN_DB) * 100;
+  }
+
+  function fillEngineDeviceSelect(select, devices, placeholder) {
+    const options = devices.map((device) => ({
+      value: device.name,
+      label: device.is_default ? `${device.name} (default)` : device.name,
+    }));
+    fillSelect(select, options, placeholder);
+  }
+
+  function fillModelSelect(models) {
+    const options = models.map((model) => ({
+      value: model.path,
+      label: `${model.name} · ${model.architecture} · ${formatSampleRate(model.sample_rate)}`,
+    }));
+    fillSelect(elements.engineModel, options, "— select model —");
+  }
+
+  function applyEngineControls() {
+    const available = state.engineAvailable;
+    const running = state.engineRunning;
+    elements.engineStart.disabled = !available || running;
+    elements.engineStop.disabled = !available || !running;
+    elements.engineLoadModel.disabled = !available;
+    elements.engineClearModel.disabled = !available;
+    elements.engineModel.disabled = !available;
+    elements.engineGain.disabled = !available;
+    elements.engineGateEnabled.disabled = !available;
+    elements.engineGateThreshold.disabled = !available;
+    elements.engineHint.hidden = available;
+  }
+
+  function renderGainValue(gain) {
+    elements.engineGainValue.textContent = `${formatDecimal(gain, 2)}×`;
+  }
+
+  function renderGateValue(threshold) {
+    elements.engineGateValue.textContent = `${formatDecimal(threshold, 0)} dB`;
+  }
+
+  function renderEngineDetails(status) {
+    const details = elements.engineDetails;
+    details.replaceChildren();
+    appendDefinition(details, "running", status.running ? "yes" : "no");
+    appendDefinition(
+      details,
+      "model",
+      status.model_loaded ? String(status.model_path || "loaded") : "none",
+    );
+    appendDefinition(details, "latency", `${formatDecimal(status.latency_ms, 1)} ms`);
+    appendDefinition(details, "sample_rate", formatSampleRate(status.sample_rate));
+    appendDefinition(
+      details,
+      "period",
+      typeof status.period_frames === "number" ? `${status.period_frames} frames` : "—",
+    );
+    appendDefinition(details, "input_peak", formatPeak(status.input_peak_db));
+    appendDefinition(details, "output_peak", formatPeak(status.output_peak_db));
+    appendDefinition(details, "overruns", String(status.overrun_frames ?? 0));
+    appendDefinition(details, "underruns", String(status.underrun_frames ?? 0));
+  }
+
+  function renderEngineLevels(status) {
+    elements.engineInputPeak.textContent = formatPeak(status.input_peak_db);
+    elements.engineOutputPeak.textContent = formatPeak(status.output_peak_db);
+    elements.engineInputBar.style.width = `${levelPercent(status.input_peak_db)}%`;
+    elements.engineOutputBar.style.width = `${levelPercent(status.output_peak_db)}%`;
+  }
+
+  function renderEngineStatus(status) {
+    state.engineAvailable = true;
+    state.engineRunning = Boolean(status.running);
+    applyEngineControls();
+    renderEngineDetails(status);
+    renderEngineLevels(status);
+    if (typeof status.gain === "number") {
+      elements.engineGain.value = String(status.gain);
+      renderGainValue(status.gain);
+    }
+    if (typeof status.gate_enabled === "boolean") {
+      elements.engineGateEnabled.checked = status.gate_enabled;
+    }
+    if (typeof status.gate_threshold_db === "number") {
+      elements.engineGateThreshold.value = String(status.gate_threshold_db);
+      renderGateValue(status.gate_threshold_db);
+    }
+  }
+
+  function renderEngineOffline() {
+    state.engineAvailable = false;
+    state.engineRunning = false;
+    applyEngineControls();
+    elements.engineDetails.replaceChildren();
+    elements.engineInputBar.style.width = "0%";
+    elements.engineOutputBar.style.width = "0%";
+    elements.engineInputPeak.textContent = "—";
+    elements.engineOutputPeak.textContent = "—";
+  }
+
+  async function refreshEngineStatus() {
+    try {
+      renderEngineStatus(await api("/api/engine/status"));
+    } catch {
+      renderEngineOffline();
+    }
+  }
+
+  function startEnginePolling() {
+    if (engineTimer !== null) return;
+    engineTimer = window.setInterval(refreshEngineStatus, ENGINE_POLL_MS);
+  }
+
+  function stopEnginePolling() {
+    window.clearInterval(engineTimer);
+    engineTimer = null;
+  }
+
+  async function loadEngineDevices() {
+    try {
+      const body = await api("/api/engine/devices");
+      fillEngineDeviceSelect(
+        elements.engineInput,
+        body.devices.filter((device) => device.is_input),
+        "— default input —",
+      );
+      fillEngineDeviceSelect(
+        elements.engineOutput,
+        body.devices.filter((device) => device.is_output),
+        "— default output —",
+      );
+      state.engineAvailable = true;
+      applyEngineControls();
+    } catch {
+      renderEngineOffline();
+    }
+  }
+
+  async function loadModels() {
+    try {
+      const body = await api("/api/models");
+      fillModelSelect(body.models);
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function startEngine() {
+    try {
+      const status = await api("/api/engine/start", {
+        method: "POST",
+        body: {
+          input_device: elements.engineInput.value || undefined,
+          output_device: elements.engineOutput.value || undefined,
+          gain: Number(elements.engineGain.value),
+          gate_enabled: elements.engineGateEnabled.checked,
+          gate_threshold_db: Number(elements.engineGateThreshold.value),
+        },
+      });
+      renderEngineStatus(status);
+      flash("Engine started.", "info");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function stopEngine() {
+    try {
+      renderEngineStatus(await api("/api/engine/stop", { method: "POST" }));
+      flash("Engine stopped.", "info");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function loadEngineModel() {
+    const path = elements.engineModel.value;
+    if (!path) {
+      flash("Select a model first.", "error");
+      return;
+    }
+    try {
+      renderEngineStatus(await api("/api/engine/model", { method: "POST", body: { path } }));
+      flash("Model loaded.", "info");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function clearEngineModel() {
+    try {
+      renderEngineStatus(await api("/api/engine/model", { method: "POST", body: { path: "" } }));
+      flash("Model cleared.", "info");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function setEngineGain(gain) {
+    try {
+      renderEngineStatus(await api("/api/engine/gain", { method: "POST", body: { gain } }));
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function setEngineGate() {
+    try {
+      const status = await api("/api/engine/gate", {
+        method: "POST",
+        body: {
+          enabled: elements.engineGateEnabled.checked,
+          threshold_db: Number(elements.engineGateThreshold.value),
+        },
+      });
+      renderEngineStatus(status);
+    } catch (error) {
+      showError(error);
+    }
+  }
+
   function connectWs() {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     socket = new WebSocket(`${protocol}://${window.location.host}/api/ws`);
@@ -323,18 +589,50 @@
 
     elements.loadTone.addEventListener("click", loadTone);
     elements.measure.addEventListener("click", measure);
+
+    elements.engineStart.addEventListener("click", startEngine);
+    elements.engineStop.addEventListener("click", stopEngine);
+    elements.engineLoadModel.addEventListener("click", loadEngineModel);
+    elements.engineClearModel.addEventListener("click", clearEngineModel);
+
+    elements.engineGain.addEventListener("input", () => {
+      renderGainValue(Number(elements.engineGain.value));
+    });
+    elements.engineGain.addEventListener("change", () => {
+      setEngineGain(Number(elements.engineGain.value));
+    });
+
+    elements.engineGateThreshold.addEventListener("input", () => {
+      renderGateValue(Number(elements.engineGateThreshold.value));
+    });
+    elements.engineGateThreshold.addEventListener("change", setEngineGate);
+    elements.engineGateEnabled.addEventListener("change", setEngineGate);
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        stopEnginePolling();
+      } else {
+        refreshEngineStatus();
+        startEnginePolling();
+      }
+    });
   }
 
   async function init() {
     bindEvents();
     elements.volumeValue.textContent = `${elements.volume.value}%`;
+    renderGainValue(Number(elements.engineGain.value));
+    renderGateValue(Number(elements.engineGateThreshold.value));
     connectWs();
+    startEnginePolling();
     try {
       await applyConfig(await api("/api/config"));
       await loadTones();
     } catch (error) {
       showError(error);
     }
+    await loadEngineDevices();
+    await loadModels();
     await refreshStatus();
   }
 

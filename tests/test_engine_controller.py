@@ -32,6 +32,18 @@ class _State:
         params = request.get("params") or {}
         if method == "status":
             return {"running": True, "gain": 1.0}
+        if method == "list_devices":
+            return {
+                "devices": [
+                    {"name": "guitar", "is_input": True, "is_output": False, "is_default": True},
+                    {
+                        "name": "headphones",
+                        "is_input": False,
+                        "is_output": True,
+                        "is_default": False,
+                    },
+                ]
+            }
         if method == "stop":
             return {"running": False}
         if method == "start":
@@ -111,6 +123,20 @@ def test_status_connects_and_delegates(engine_server: _Engine) -> None:
     assert controller.status() == {"running": True, "gain": 1.0}
     assert engine_server.state.requests[-1]["method"] == "status"
     assert controller.running is True
+
+    controller.shutdown()
+
+
+def test_list_devices_delegates(engine_server: _Engine) -> None:
+    controller = _controller(engine_server)
+
+    devices = controller.list_devices()
+
+    assert devices == [
+        {"name": "guitar", "is_input": True, "is_output": False, "is_default": True},
+        {"name": "headphones", "is_input": False, "is_output": True, "is_default": False},
+    ]
+    assert engine_server.state.requests[-1]["method"] == "list_devices"
 
     controller.shutdown()
 

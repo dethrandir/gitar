@@ -240,6 +240,63 @@ button:focus-visible {
   color: var(--error);
 }
 
+.hint {
+  margin: 0 0 0.9rem;
+  color: var(--warn);
+  font-size: 0.85rem;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.checkbox input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+.levels {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.level-row {
+  display: grid;
+  grid-template-columns: 2.25rem minmax(0, 1fr) 4.75rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.level-label {
+  color: var(--muted);
+}
+
+.level-value {
+  text-align: right;
+}
+
+.level-bar {
+  height: 0.6rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-raised);
+}
+
+.level-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--ok), var(--warn) 75%, var(--error));
+  transition: width 0.12s linear;
+}
+
 .details {
   display: grid;
   grid-template-columns: minmax(6rem, 10rem) 1fr;

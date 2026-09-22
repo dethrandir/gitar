@@ -82,6 +82,86 @@
         </div>
       </section>
 
+      <section class="card" aria-labelledby="engine-title">
+        <h2 id="engine-title">Engine</h2>
+        <p class="hint" id="engine-hint" hidden>
+          gitar-engine binary not found &mdash; engine controls are disabled.
+        </p>
+
+        <div class="fields">
+          <div class="field">
+            <label for="engine-input">Input device</label>
+            <select id="engine-input"></select>
+          </div>
+          <div class="field">
+            <label for="engine-output">Output device</label>
+            <select id="engine-output"></select>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button type="button" id="engine-start">Start</button>
+          <button type="button" id="engine-stop" class="ghost">Stop</button>
+        </div>
+
+        <div class="field">
+          <label for="engine-model">Model</label>
+          <div class="row">
+            <select id="engine-model"></select>
+            <button type="button" id="engine-load-model">Load model</button>
+            <button type="button" id="engine-clear-model" class="ghost">Clear</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="engine-gain">
+            Gain <output id="engine-gain-value" for="engine-gain">1.00&times;</output>
+          </label>
+          <input id="engine-gain" type="range" min="0" max="4" step="0.05" value="1" />
+        </div>
+
+        <div class="field">
+          <label class="checkbox" for="engine-gate-enabled">
+            <input id="engine-gate-enabled" type="checkbox" />
+            Noise gate
+          </label>
+        </div>
+
+        <div class="field">
+          <label for="engine-gate-threshold">
+            Gate threshold
+            <output id="engine-gate-value" for="engine-gate-threshold">-60 dB</output>
+          </label>
+          <input
+            id="engine-gate-threshold"
+            type="range"
+            min="-96"
+            max="0"
+            step="1"
+            value="-60"
+          />
+        </div>
+
+        <div class="levels">
+          <div class="level-row">
+            <span class="level-label">In</span>
+            <div class="level-bar">
+              <div class="level-fill" id="engine-input-bar"></div>
+            </div>
+            <span class="level-value" id="engine-input-peak">&mdash;</span>
+          </div>
+          <div class="level-row">
+            <span class="level-label">Out</span>
+            <div class="level-bar">
+              <div class="level-fill" id="engine-output-bar"></div>
+            </div>
+            <span class="level-value" id="engine-output-peak">&mdash;</span>
+          </div>
+        </div>
+
+        <dl class="details" id="engine-details"></dl>
+      </section>
+
       <section class="card" aria-labelledby="status-title">
         <h2 id="status-title">Status</h2>
         <dl class="details" id="details"></dl>
