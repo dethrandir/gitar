@@ -1,0 +1,11 @@
+{
+  "name": "subways_of_your_mind",
+  "model_path": "",
+  "cab_ir_path": "",
+  "gain": 1.4,
+  "gate_enabled": true,
+  "gate_threshold_db": -55.0,
+  "eq_low_db": -2.0,
+  "eq_mid_db": 1.0,
+  "eq_high_db": 3.0
+}

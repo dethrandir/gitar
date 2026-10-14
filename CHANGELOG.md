@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-14
+
+### Added
+
+- **Bundled rig presets**: the package ships default presets (starting with
+  `subways_of_your_mind`) that `gitard presets install` seeds into the user's
+  preset directory without overwriting existing files. The Linux and Windows
+  v2 installers run it automatically after installing the control server.
+- **`gitard presets`** command: `list` the installed presets or `install` the
+  bundled defaults.
+
 ## [2.0.0] - 2026-09-23
 
 ### Added

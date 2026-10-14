@@ -13,6 +13,7 @@ import uvicorn as uvicorn
 from gitar_server import __version__
 from gitar_server.api import create_app
 from gitar_server.config import config_path, load_config
+from gitar_server.presets import list_presets, seed_default_presets
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 7343
@@ -56,6 +57,10 @@ def _build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--reload", action="store_true", help="reload on source changes")
     subparsers.add_parser("version", help="print the gitar version")
     subparsers.add_parser("config", help="print the config file path and contents")
+    presets = subparsers.add_parser("presets", help="manage rig presets")
+    presets_commands = presets.add_subparsers(dest="presets_command")
+    presets_commands.add_parser("list", help="list installed preset names")
+    presets_commands.add_parser("install", help="install the bundled default presets")
     return parser
 
 
@@ -81,6 +86,17 @@ def _print_config() -> int:
     return 0
 
 
+def _presets(args: argparse.Namespace) -> int:
+    action = getattr(args, "presets_command", None) or "list"
+    if action == "install":
+        for name in seed_default_presets():
+            print(name)
+        return 0
+    for name in list_presets():
+        print(name)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     try:
@@ -95,6 +111,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "version":
         print(f"gitar {__version__}")
         return 0
+    if args.command == "presets":
+        return _presets(args)
     return _print_config()
 
 

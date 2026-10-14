@@ -48,6 +48,18 @@ def presets_dir() -> Path:
     return config_dir() / "presets"
 
 
+def bundled_presets_dir() -> Path:
+    """Directory holding the presets shipped inside the package."""
+    return Path(__file__).resolve().parent / "data" / "presets"
+
+
+def list_bundled_presets() -> list[str]:
+    root = bundled_presets_dir()
+    if not root.is_dir():
+        return []
+    return sorted(path.stem for path in root.glob("*.json"))
+
+
 def safe_name(name: str) -> str:
     trimmed = name.strip()
     if any(fragment in trimmed for fragment in _UNSAFE_FRAGMENTS) or _CONTROL_CHARS.search(trimmed):
@@ -87,13 +99,10 @@ def load_preset(name: str) -> Preset:
         raise PresetError(f"invalid preset {safe!r}: {exc}") from exc
 
 
-def save_preset(preset: Preset) -> Path:
-    safe = safe_name(preset.name)
-    directory = presets_dir()
+def _write_preset(path: Path, preset: Preset) -> None:
+    directory = path.parent
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{safe}.json"
-    stored = preset.model_copy(update={"name": safe})
-    payload = json.dumps(stored.model_dump(), indent=2) + "\n"
+    payload = json.dumps(preset.model_dump(), indent=2) + "\n"
     handle, temp_name = tempfile.mkstemp(dir=directory, prefix=".preset-", suffix=".tmp")
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as stream:
@@ -102,7 +111,41 @@ def save_preset(preset: Preset) -> Path:
     except BaseException:
         Path(temp_name).unlink(missing_ok=True)
         raise
+
+
+def save_preset(preset: Preset) -> Path:
+    safe = safe_name(preset.name)
+    path = presets_dir() / f"{safe}.json"
+    stored = preset.model_copy(update={"name": safe})
+    _write_preset(path, stored)
     return path
+
+
+def seed_default_presets(destination: Path | None = None) -> list[str]:
+    """Install the bundled presets into ``destination`` (the user's preset dir).
+
+    Existing files are left untouched so a user's edits survive an upgrade.
+    Returns the sorted names of the presets that were written.
+    """
+    source = bundled_presets_dir()
+    target = destination if destination is not None else presets_dir()
+    if not source.is_dir():
+        return []
+
+    written: list[str] = []
+    for path in sorted(source.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            preset = Preset.model_validate({**data, "name": path.stem})
+        except (OSError, json.JSONDecodeError, ValidationError):
+            continue
+        safe = safe_name(path.stem)
+        target_path = target / f"{safe}.json"
+        if target_path.exists():
+            continue
+        _write_preset(target_path, preset.model_copy(update={"name": safe}))
+        written.append(safe)
+    return sorted(written)
 
 
 def delete_preset(name: str) -> bool:

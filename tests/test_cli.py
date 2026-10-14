@@ -95,3 +95,32 @@ def test_open_schedules_browser_for_loopback(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(cli, "_schedule_open", lambda delay, callback: callback())
     assert cli.main(["serve", "--open"]) == 0
     assert opened == ["http://127.0.0.1:7343"]
+
+
+def test_presets_install_seeds_bundled_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("GITAR_PRESETS_DIR", str(tmp_path))
+
+    assert cli.main(["presets", "install"]) == 0
+
+    assert (tmp_path / "subways_of_your_mind.json").exists()
+    assert "subways_of_your_mind" in capsys.readouterr().out
+
+
+def test_presets_list_prints_installed_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("GITAR_PRESETS_DIR", str(tmp_path))
+    from gitar_server.presets import Preset, save_preset
+
+    save_preset(Preset(name="mine"))
+
+    assert cli.main(["presets", "list"]) == 0
+    assert "mine" in capsys.readouterr().out
+
+
+def test_presets_defaults_to_list(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITAR_PRESETS_DIR", str(tmp_path))
+
+    assert cli.main(["presets"]) == 0

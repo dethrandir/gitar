@@ -167,6 +167,11 @@ if (-not $NoPython) {
                 Write-Warn "  python -m pip install --user $($wheelAsset.browser_download_url)"
             } else {
                 Write-Ok "Installed $($wheelAsset.name)"
+                & $python.Source -m gitar_server presets install | Out-Null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Warn "Could not install the default presets; run:"
+                    Write-Warn "  python -m gitar_server presets install"
+                }
             }
         }
     }

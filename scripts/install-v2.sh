@@ -199,6 +199,9 @@ exec "$VENV/bin/gitard" "\$@"
 SHIM
                 chmod 755 "$BIN_DIR/gitard"
                 ok "Installed $BIN_DIR/gitard"
+                if "$VENV/bin/gitard" presets install >/dev/null 2>&1; then
+                    ok "Installed the default presets"
+                fi
             else
                 warn "Could not install the control server automatically."
                 warn "Create a venv and install the wheel yourself:"

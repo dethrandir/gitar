@@ -12,11 +12,13 @@ from gitar_server.presets import (
     PresetError,
     PresetNotFoundError,
     delete_preset,
+    list_bundled_presets,
     list_presets,
     load_preset,
     presets_dir,
     safe_name,
     save_preset,
+    seed_default_presets,
 )
 
 
@@ -137,3 +139,40 @@ def test_safe_name_rejects_unsafe_names(bad_name: str) -> None:
 
 def test_safe_name_trims_whitespace() -> None:
     assert safe_name("  clean  ") == "clean"
+
+
+def test_list_bundled_presets_includes_subways() -> None:
+    assert "subways_of_your_mind" in list_bundled_presets()
+
+
+def test_seed_default_presets_copies_bundled_files(preset_home: Path) -> None:
+    written = seed_default_presets()
+
+    assert "subways_of_your_mind" in written
+    assert (preset_home / "subways_of_your_mind.json").exists()
+    preset = load_preset("subways_of_your_mind")
+    assert preset.gain == 1.4
+    assert preset.eq_low_db == -2.0
+    assert preset.eq_high_db == 3.0
+
+
+def test_seed_default_presets_is_idempotent(preset_home: Path) -> None:
+    assert seed_default_presets()
+    assert seed_default_presets() == []
+
+
+def test_seed_default_presets_does_not_overwrite_user_edit(preset_home: Path) -> None:
+    save_preset(_preset(name="subways_of_your_mind", gain=9.0))
+
+    seed_default_presets()
+
+    assert load_preset("subways_of_your_mind").gain == 9.0
+
+
+def test_seed_default_presets_into_explicit_destination(tmp_path: Path) -> None:
+    destination = tmp_path / "out"
+
+    written = seed_default_presets(destination)
+
+    assert "subways_of_your_mind" in written
+    assert (destination / "subways_of_your_mind.json").exists()
