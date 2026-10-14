@@ -13,6 +13,7 @@
 #include "gitar/eq.hpp"
 #include "gitar/level_meter.hpp"
 #include "gitar/metronome.hpp"
+#include "gitar/mono_mix.hpp"
 #include "gitar/neural_model.hpp"
 #include "gitar/noise_gate.hpp"
 #include "gitar/pitch_detector.hpp"
@@ -132,9 +133,8 @@ void Engine::Impl::capture_callback(ma_device* device, void* output, const void*
             std::size_t offset = 0;
             while (offset < frame_count) {
                 const std::size_t chunk = std::min<std::size_t>(capacity, frame_count - offset);
-                for (std::size_t i = 0; i < chunk; ++i) {
-                    self->analysis_scratch[i] = samples[(offset + i) * channels];
-                }
+                mix_to_mono(samples + offset * channels, channels, chunk,
+                            self->analysis_scratch.data());
                 if (pitch != nullptr) {
                     pitch->process(self->analysis_scratch.data(), chunk);
                 }
@@ -170,9 +170,7 @@ void Engine::Impl::playback_callback(ma_device* device, void* output, const void
         while (offset < frame_count && capacity > 0) {
             const std::size_t chunk = std::min<std::size_t>(capacity, frame_count - offset);
             float* const mono = self->mono_scratch.data();
-            for (std::size_t i = 0; i < chunk; ++i) {
-                mono[i] = samples[(offset + i) * channels];
-            }
+            mix_to_mono(samples + offset * channels, channels, chunk, mono);
             if (gate != nullptr) {
                 gate->process(mono, chunk);
             }

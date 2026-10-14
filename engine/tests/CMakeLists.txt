@@ -1,5 +1,6 @@
 add_executable(gitar_engine_tests
     main.cpp
+    test_mono_mix.cpp
     test_ring_buffer.cpp
     test_level_meter.cpp
     test_pitch_detector.cpp

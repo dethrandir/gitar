@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-10-14
+
+### Fixed
+
+- **Engine**: the mono DSP chain (gate, amp model, cabinet, EQ) and the tuner
+  and spectrum analyzers only read input channel 0, so an instrument captured on
+  the right channel produced silence. The engine now averages all input channels
+  to mono, so a signal on any channel is preserved.
+
 ## [2.1.0] - 2026-10-14
 
 ### Added
