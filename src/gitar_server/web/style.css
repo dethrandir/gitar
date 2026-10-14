@@ -209,6 +209,31 @@ button.ghost:hover {
   background: var(--surface-raised);
 }
 
+button:disabled,
+select:disabled,
+input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button:disabled:hover {
+  background: var(--accent);
+}
+
+button.ghost:disabled:hover {
+  background: transparent;
+}
+
+.engine-state {
+  margin: 0.1rem 0 0.9rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.engine-state[data-state="running"] {
+  color: var(--ok);
+}
+
 select:focus-visible,
 input:focus-visible,
 button:focus-visible {

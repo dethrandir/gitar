@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.2] - 2026-10-14
+
+### Fixed
+
+- **Web UI**: the engine controls gave no visible feedback about the running
+  state, so a disabled Start button (engine already running) looked identical to
+  an enabled one. Disabled controls are now dimmed and the panel shows an
+  explicit "Engine running" / "Engine stopped" state.
+
 ## [2.1.1] - 2026-10-14
 
 ### Fixed

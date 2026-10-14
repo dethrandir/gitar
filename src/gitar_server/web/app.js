@@ -29,6 +29,7 @@
     engineOutput: document.getElementById("engine-output"),
     engineStart: document.getElementById("engine-start"),
     engineStop: document.getElementById("engine-stop"),
+    engineState: document.getElementById("engine-state"),
     engineModel: document.getElementById("engine-model"),
     engineLoadModel: document.getElementById("engine-load-model"),
     engineClearModel: document.getElementById("engine-clear-model"),
@@ -398,6 +399,9 @@
     elements.engineRecordStart.disabled = !available || state.engineRecording;
     elements.engineRecordStop.disabled = !available || !state.engineRecording;
     elements.engineHint.hidden = available;
+    elements.engineState.hidden = !available;
+    elements.engineState.textContent = running ? "Engine running" : "Engine stopped";
+    elements.engineState.dataset.state = running ? "running" : "stopped";
   }
 
   function renderGainValue(gain) {
