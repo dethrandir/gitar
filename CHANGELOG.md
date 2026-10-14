@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.3] - 2026-10-14
+
+### Fixed
+
+- **Versioning**: v2.1.2 shipped an engine binary still labelled 2.1.1 because
+  the engine version header was not committed. Re-released with the Python
+  package and the engine header in sync.
+
 ## [2.1.2] - 2026-10-14
 
 ### Fixed
