@@ -2,6 +2,6 @@
 
 namespace gitar {
 
-constexpr const char* kEngineVersion = "2.1.3";
+constexpr const char* kEngineVersion = "2.1.4";
 
 }  // namespace gitar

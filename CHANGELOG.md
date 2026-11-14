@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.4] - 2026-11-14
+
+### Added
+
+- **`subways` tone**: the tone menu (web UI and `gitar tone subways`) now offers
+  a bright Princeton clean with slow chorus and a short room reverb, modelled on
+  the guitar sound of *Subways of Your Mind*.
+
 ## [2.1.3] - 2026-10-14
 
 ### Fixed

@@ -145,13 +145,14 @@ gitar amp         # start playing through the Guitarix amp
 | `gitar tone clean` | Load a clean tube-amp preset into Guitarix. |
 | `gitar tone crunch` | Load a light (Vox-style) overdrive preset. |
 | `gitar tone army` | Load a tight, muted-riff JCM-800 preset (Seven Nation Army). |
+| `gitar tone subways` | Load a bright Princeton clean with slow chorus and a short room reverb (Subways of Your Mind). |
 | `gitar meter` | Play for 10 seconds; tells you whether your input level is healthy. |
 | `gitar setup` | Re-select the audio interface, channel, and headphone output. |
 | `gitar update` | Download the latest version. |
 | `gitar version` | Print the version. |
 
 Turkish aliases also work: `amfi`, `duz`, `kapat`, `durum`, `ses`, `ton
-temiz|crunch|army`, `olc`, `ayarla`, `guncelle`, `surum`.
+temiz|crunch|army|subways`, `olc`, `ayarla`, `guncelle`, `surum`.
 
 ### Setting the gain
 

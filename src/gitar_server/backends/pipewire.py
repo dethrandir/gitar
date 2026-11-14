@@ -43,6 +43,7 @@ _TONE_PRESETS: dict[str, str] = {
     "clean": "clean_clean",
     "crunch": "crunch_vintage_vox",
     "army": "brett_jcm",
+    "subways": "clean_delay_chorus",
 }
 _TONE_PARAMS: dict[str, list[object]] = {
     "clean": [
@@ -78,6 +79,38 @@ _TONE_PARAMS: dict[str, list[object]] = {
         0.0,
     ],
     "crunch": ["noise_gate.on_off", 1],
+    # Jangly post-punk clean: bright Princeton tone stack, slow chorus and a
+    # short room reverb, played clean enough that the gate has to stay open.
+    "subways": [
+        "gain.gain",
+        3.6,
+        "noise_gate.on_off",
+        1,
+        "noise_gate.threshold",
+        0.02,
+        "zita_rev1.on_off",
+        1,
+        "zita_rev1.output.dry_wet_mix",
+        -0.5,
+        "chorus.on_off",
+        1,
+        "chorus.depth",
+        0.3,
+        "chorus.freq",
+        0.3,
+        "chorus.level",
+        0.7,
+        "amp.tonestack.Treble",
+        0.62,
+        "amp.tonestack.Middle",
+        0.45,
+        "amp.tonestack.Bass",
+        0.38,
+        "cab.treble",
+        0.2,
+        "cab.bass",
+        0.0,
+    ],
 }
 
 
@@ -366,7 +399,7 @@ class PipeWireBackend(AudioBackend):
             path.unlink(missing_ok=True)
 
     def list_tones(self) -> list[str]:
-        return ["army", "clean", "crunch"]
+        return ["army", "clean", "crunch", "subways"]
 
     def load_tone(self, config: Config, tone: str) -> None:
         preset = _TONE_PRESETS.get(tone)

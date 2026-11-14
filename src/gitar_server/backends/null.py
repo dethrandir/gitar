@@ -8,7 +8,7 @@ from .base import AudioBackend, BackendError, BackendStatus, LevelReading, Route
 
 MIN_VOLUME = 0
 MAX_VOLUME = 150
-_KNOWN_TONES: frozenset[str] = frozenset({"clean", "crunch", "army"})
+_KNOWN_TONES: frozenset[str] = frozenset({"clean", "crunch", "army", "subways"})
 
 
 class NullBackend(AudioBackend):

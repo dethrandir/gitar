@@ -58,6 +58,36 @@ ARMY_SET: tuple[object, ...] = (
     0.0,
 )
 CRUNCH_SET: tuple[object, ...] = ("noise_gate.on_off", 1)
+SUBWAYS_SET: tuple[object, ...] = (
+    "gain.gain",
+    3.6,
+    "noise_gate.on_off",
+    1,
+    "noise_gate.threshold",
+    0.02,
+    "zita_rev1.on_off",
+    1,
+    "zita_rev1.output.dry_wet_mix",
+    -0.5,
+    "chorus.on_off",
+    1,
+    "chorus.depth",
+    0.3,
+    "chorus.freq",
+    0.3,
+    "chorus.level",
+    0.7,
+    "amp.tonestack.Treble",
+    0.62,
+    "amp.tonestack.Middle",
+    0.45,
+    "amp.tonestack.Bass",
+    0.38,
+    "cab.treble",
+    0.2,
+    "cab.bass",
+    0.0,
+)
 
 
 def make_config(
@@ -481,7 +511,7 @@ def test_status_omits_volume_when_unreadable(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_list_tones() -> None:
-    assert pipewire.PipeWireBackend().list_tones() == ["army", "clean", "crunch"]
+    assert pipewire.PipeWireBackend().list_tones() == ["army", "clean", "crunch", "subways"]
 
 
 def run_load_tone(
@@ -565,6 +595,12 @@ def test_load_tone_army_preset_and_params(monkeypatch: pytest.MonkeyPatch) -> No
     events = run_load_tone(monkeypatch, "army")
     assert ("rpc", "7400", "setpreset", ("Sonnie_Tele", "brett_jcm")) in events
     assert ("rpc", "7400", "set", ARMY_SET) in events
+
+
+def test_load_tone_subways_preset_and_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    events = run_load_tone(monkeypatch, "subways")
+    assert ("rpc", "7400", "setpreset", ("Sonnie_Tele", "clean_delay_chorus")) in events
+    assert ("rpc", "7400", "set", SUBWAYS_SET) in events
 
 
 def test_load_tone_rejects_unknown(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -272,13 +272,14 @@ Kullanım: gitar <komut>
   ton temiz       Guitarix'e temiz amfi ayarını yükle
   ton crunch      Guitarix'e hafif bozuk (crunch) ayarı yükle
   ton army        Seven Nation Army için tok, muted riff ayarı (cızırtısız)
+  ton subways     Subways of Your Mind için parlak, chorus'lü clean ayarı
   olc             10 saniye çal, giriş seviyen iyi mi söylesin
   ayarla          Ses kartını, gitar kanalını ve kulaklığı seç
   guncelle        Son sürümü indir
   surum           Sürümü yazdır
 
 İngilizce karşılıklar da çalışır: amp, direct, stop, status, volume,
-tone clean|crunch|army, meter, setup, update, version.
+tone clean|crunch|army|subways, meter, setup, update, version.
 Ayar dosyası: $CONFIG
 EOF
 }
@@ -343,7 +344,8 @@ case "$komut" in
             temiz|clean)  preset=clean_clean ;;
             crunch)       preset=crunch_vintage_vox ;;
             army|seven)   preset=brett_jcm ;;
-            *) hata "Kullanım: gitar ton temiz | gitar ton crunch | gitar ton army" ;;
+            subways)      preset=clean_delay_chorus ;;
+            *) hata "Kullanım: gitar ton temiz | gitar ton crunch | gitar ton army | gitar ton subways" ;;
         esac
         kontrol_cihaz
         gerekli guitarix
@@ -361,6 +363,10 @@ case "$komut" in
             # Seven Nation Army: tok JCM-800, muted riff için sıkı gate,
             # reverb kapalı (back sound az), tiz kısık (cinlama/cızırtı az)
             rpc set '["gain.gain",6.0,"noise_gate.on_off",1,"noise_gate.threshold",0.08,"zita_rev1.on_off",0,"zita_rev1.output.dry_wet_mix",-1.0,"amp.tonestack.Treble",0.35,"amp.tonestack.Middle",0.65,"amp.tonestack.Bass",0.55,"cab.treble",0.0,"cab.bass",0.0]'
+        elif [ "$preset" = clean_delay_chorus ]; then
+            # Subways of Your Mind: parlak Princeton clean, yavaş chorus,
+            # kısa oda reverb'ü; temiz çalışta gate eşiği düşük kalmalı
+            rpc set '["gain.gain",3.6,"noise_gate.on_off",1,"noise_gate.threshold",0.02,"zita_rev1.on_off",1,"zita_rev1.output.dry_wet_mix",-0.5,"chorus.on_off",1,"chorus.depth",0.3,"chorus.freq",0.3,"chorus.level",0.7,"amp.tonestack.Treble",0.62,"amp.tonestack.Middle",0.45,"amp.tonestack.Bass",0.38,"cab.treble",0.2,"cab.bass",0.0]'
         else
             rpc set '["noise_gate.on_off",1]'
         fi

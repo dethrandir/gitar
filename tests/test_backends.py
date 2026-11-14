@@ -15,7 +15,7 @@ from gitar_server.backends import (
 )
 from gitar_server.config import Config
 
-TONES = ["army", "clean", "crunch"]
+TONES = ["army", "clean", "crunch", "subways"]
 
 
 def test_exports_are_available() -> None:

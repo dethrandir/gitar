@@ -18,7 +18,7 @@ from gitar_server.engine_client import EngineError
 from gitar_server.engine_controller import EngineController
 from gitar_server.models import ModelInfo
 
-TONES = ["army", "clean", "crunch"]
+TONES = ["army", "clean", "crunch", "subways"]
 
 
 @pytest.fixture()
