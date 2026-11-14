@@ -42,7 +42,8 @@ python scripts/bump_version.py <major|minor|patch>
 python scripts/bump_version.py 2.1.0
 ```
 
-Add a `CHANGELOG.md` entry for every version change.
+Add a `CHANGELOG.md` entry for every version change. A version is not released
+until its tag is pushed; see `## Releasing`.
 
 ## Gate commands (must pass before a commit)
 
@@ -73,11 +74,34 @@ git ls-files engine | grep -E '\.(cpp|hpp|cc|h)$' | grep -v '^engine/third_party
 
 ## Rules for agents
 
-- **Do not** run `git add` / `git commit` / `git push`. The orchestrator commits.
+- **You own the git flow**: run `git add` / `git commit` / `git push`, and create
+  and push release tags, yourself. A finished change is committed evidence, not
+  a working tree full of edits. Re-read `## Releasing` before you tag anything.
 - **Do not** weaken or skip tests, loosen types, or add hacks to make a gate pass.
 - **Do not** refactor outside the scope of the assigned unit.
 - Every new behavior starts with a failing test where practical (TDD).
 - Report evidence: exact commands run and their raw output.
+
+## Releasing
+
+A pushed tag is what publishes, so treat it as the last step, not a decoration.
+
+1. Add the `CHANGELOG.md` entry and bump the Python and engine versions
+   together with `python scripts/bump_version.py <version>`.
+2. Run the gate commands above on the exact commit you are about to tag.
+3. Push `main`, then tag and push the tag:
+
+   ```sh
+   git tag -a v2.1.4 -m v2.1.4
+   git push origin main v2.1.4
+   ```
+
+4. `.github/workflows/release.yml` builds the engine for Linux and Windows plus
+   the wheel and sdist, then opens the GitHub release with generated notes and
+   attaches every artifact. Do not create the release by hand, and do not tag
+   twice: watch the run (`gh run watch`) and confirm the assets landed
+   (`gh release view <tag>`).
+5. PyPI publishing stays opt-in through the `PYPI_PUBLISH` repository variable.
 
 ## Roadmap
 
